@@ -1,12 +1,16 @@
 name: Instagram Daily Pipeline
 
+# DISABLED 2026-05-02 — scheduled trigger commented out. workflow_dispatch
+# kept so the pipeline can still be run manually from the GitHub UI. To
+# re-enable: uncomment the `schedule:` block below.
+#
 # Runs daily at 4:00 AM Las Vegas time (Pacific, UTC-7 PDT / UTC-8 PST)
 # Using UTC-7 (PDT): 4 AM PT = 11:00 UTC. Same daily slot as the TikTok and
 # Threads Render crons — IG-2nd doesn't depend on any of their output (it
 # pulls from its own CSV bank), so no staggering is needed.
 on:
-  schedule:
-    - cron: '0 11 * * *'
+  # schedule:
+  #   - cron: '0 11 * * *'
   workflow_dispatch: # Allow manual runs from GitHub UI
 
 env:
