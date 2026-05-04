@@ -8,7 +8,7 @@
  */
 
 import Link from "next/link";
-import { ArrowLeftIcon } from "lucide-react";
+import { ArrowLeftIcon, PaletteIcon } from "lucide-react";
 import { getSupabaseClient } from "@/lib/supabase";
 import { AppShell } from "@/components/app-shell";
 import { PlatformIcon } from "@/components/platform-icon";
@@ -71,6 +71,45 @@ export default async function LeilaLinkedInPage() {
         actions={[{ url: "/api/cron/run", body: { job: "linkedin-leila-cron" } }]}
         lastRun={lastRun}
       />
+
+      {/* Sandbox entry point. Background/text/header are now locked in
+          the cron path; this page survives as a preview tool for any
+          further visual iteration the operator wants to do. */}
+      <Link
+        href="/leila/linkedin/design"
+        className="group mt-4 flex items-center justify-between gap-3 rounded-xl border px-5 py-4 transition-colors hover:bg-white/[0.02]"
+        style={{
+          backgroundColor: "var(--card-warm-bg)",
+          borderColor: "var(--card-warm-border)",
+        }}
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <span
+            className="inline-flex items-center justify-center h-9 w-9 rounded-lg border shrink-0"
+            style={{
+              backgroundColor: "rgba(174,86,48,0.09)",
+              borderColor: "rgba(174,86,48,0.19)",
+            }}
+          >
+            <PaletteIcon
+              className="size-[15px]"
+              style={{ color: "var(--terracotta)" }}
+            />
+          </span>
+          <div className="min-w-0">
+            <div className="text-[14px] font-medium text-[var(--overview-fg)]">
+              Graphics design sandbox
+            </div>
+            <div className="text-[12px] text-[var(--overview-fg)]/55">
+              Preview the locked-in Leila design (black bg, white text,
+              Leila_Header.png) and experiment with other knobs.
+            </div>
+          </div>
+        </div>
+        <span className="text-[var(--overview-fg)]/40 group-hover:text-[var(--overview-fg)]/70 transition-colors text-[18px]">
+          →
+        </span>
+      </Link>
     </AppShell>
   );
 }

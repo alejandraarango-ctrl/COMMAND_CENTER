@@ -27,6 +27,25 @@ import { verifyApiAuth } from "@/lib/auth";
 import type { TemplateConfig } from "@/lib/template-types";
 import { DEFAULT_TEMPLATE_CONFIG, validateTemplateConfig } from "@/lib/template-types";
 
+// Per-creator header image overrides. The square renderer's default is
+// Alex's Header.png in public/ig-pipeline; anything in this map wins for
+// that platform. Loaded once and cached per-process — these files don't
+// change at runtime, and re-reading on every cron call would needlessly
+// thrash the disk.
+const PLATFORM_HEADER_PATHS: Record<string, string> = {
+  linkedin_leila: "public/ig-pipeline/Leila_Header.png",
+};
+const headerBufferCache = new Map<string, Buffer>();
+async function loadPlatformHeader(platform: string): Promise<Buffer | undefined> {
+  const rel = PLATFORM_HEADER_PATHS[platform];
+  if (!rel) return undefined;
+  const cached = headerBufferCache.get(rel);
+  if (cached) return cached;
+  const buf = await fs.readFile(path.join(process.cwd(), rel));
+  headerBufferCache.set(rel, buf);
+  return buf;
+}
+
 export async function POST(req: NextRequest) {
   if (!(await verifyApiAuth(req))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -94,7 +113,28 @@ export async function POST(req: NextRequest) {
       // Merge with defaults so any missing fields (e.g. paddingLeft vs old
       // single "padding") fall back to the locked-in values.
       fbTemplateConfig = { ...DEFAULT_TEMPLATE_CONFIG, ...validateTemplateConfig(template.config as Record<string, unknown>) };
+
+      // Per-creator overrides on top of Alex's Facebook template. These
+      // are the *locked-in* deltas — the operator decided on them in the
+      // design sandbox and they stay constant regardless of any future
+      // edits to Alex's Facebook template config. Anything else (padding,
+      // typography, alignment) keeps inheriting from FB so that broad
+      // layout changes apply to both creators by default.
+      if (platform === "linkedin_leila") {
+        fbTemplateConfig = {
+          ...fbTemplateConfig,
+          backgroundColor: "#000000",
+          textColor: "#ffffff",
+        };
+      }
     }
+
+    // Resolve the per-creator header image up front, so we don't re-read
+    // from disk inside the per-tweet loop. Falls back to the renderer's
+    // hardcoded Header.png default when this platform has no override.
+    const platformHeaderBuffer = usesSquareTemplate
+      ? await loadPlatformHeader(platform)
+      : undefined;
 
     // Temp directory for intermediate files (TikTok needs PNG→MP4 conversion,
     // Facebook just renders directly to a buffer). We wrap the per-item work
@@ -125,7 +165,11 @@ export async function POST(req: NextRequest) {
             // don't collide with Facebook's (same tweet text could be used
             // for both creators in the future, and Buffer needs distinct
             // signed URLs anyway).
-            const pngBuffer = await renderSquareQuoteCard(normalized, fbTemplateConfig!);
+            const pngBuffer = await renderSquareQuoteCard(
+              normalized,
+              fbTemplateConfig!,
+              { headerImageBuffer: platformHeaderBuffer },
+            );
             const storagePath = `${platform}/tweet-${tweet.id}.png`;
 
             const { error: uploadError } = await supabase.storage

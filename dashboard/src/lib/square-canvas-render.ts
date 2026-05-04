@@ -99,9 +99,23 @@ function wrapText(
  *
  * Returns a PNG Buffer ready for upload to Supabase Storage.
  */
+export interface RenderOptions {
+  /**
+   * Override the header image with raw bytes instead of loading the
+   * default Header.png from disk. Used by the design sandbox so an
+   * operator can preview a candidate header image before any of it
+   * is committed to disk or wired into the cron.
+   *
+   * Pass a Buffer of a decoded PNG/JPEG/etc. — node-canvas's
+   * `loadImage` accepts Buffers directly.
+   */
+  headerImageBuffer?: Buffer;
+}
+
 export async function renderSquareQuoteCard(
   text: string,
-  config: TemplateConfig
+  config: TemplateConfig,
+  options: RenderOptions = {}
 ): Promise<Buffer> {
   const { createCanvas, loadImage } = await getCanvas();
   const canvas = createCanvas(config.width, config.height);
@@ -135,9 +149,12 @@ export async function renderSquareQuoteCard(
   let headerAspectRatio = 0; // height / width of the original image
   if (config.showHeader) {
     try {
-      headerImg = await loadImage(
-        path.join(process.cwd(), "public/ig-pipeline/Header.png")
-      );
+      // Caller-supplied bytes win over the on-disk default — this is how
+      // the design sandbox previews a candidate header without writing it.
+      const source = options.headerImageBuffer
+        ? options.headerImageBuffer
+        : path.join(process.cwd(), "public/ig-pipeline/Header.png");
+      headerImg = await loadImage(source);
       headerAspectRatio = headerImg.height / headerImg.width;
     } catch {
       headerImg = null;
