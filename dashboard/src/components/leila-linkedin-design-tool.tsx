@@ -69,9 +69,19 @@ function applyLockedColors(c: TemplateConfig): TemplateConfig {
 interface DesignToolProps {
   /** Server-fetched starting config — falls back to DEFAULT_TEMPLATE_CONFIG. */
   initialConfig: TemplateConfig | null;
+  /**
+   * Server-loaded Leila header as a base64 data URL. This is what the
+   * cron actually renders against in production (same on-disk file at
+   * public/ig-pipeline/Leila_Header.png), so the sandbox seeds with it
+   * to keep preview parity with prod. `null` if the file is missing.
+   */
+  defaultHeaderImageDataUrl: string | null;
 }
 
-export function LeilaLinkedInDesignTool({ initialConfig }: DesignToolProps) {
+export function LeilaLinkedInDesignTool({
+  initialConfig,
+  defaultHeaderImageDataUrl,
+}: DesignToolProps) {
   const startingConfig = useMemo<TemplateConfig>(
     () => applyLockedColors(initialConfig ?? DEFAULT_TEMPLATE_CONFIG),
     [initialConfig],
@@ -83,12 +93,18 @@ export function LeilaLinkedInDesignTool({ initialConfig }: DesignToolProps) {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  // Custom header image: when set, sent as a data URL with each preview
-  // request. When null, the server falls back to the default Header.png.
-  const [headerImageDataUrl, setHeaderImageDataUrl] = useState<string | null>(null);
+  // Header image data URL sent with each preview. Initialized to the
+  // creator's default (Leila_Header.png) so the baseline preview matches
+  // what the cron produces. Upload replaces; "Clear" reverts to the
+  // creator default. `customName` is set only for user-uploaded files
+  // so the UI can distinguish "default" vs "custom: <filename>".
+  const [headerImageDataUrl, setHeaderImageDataUrl] = useState<string | null>(
+    defaultHeaderImageDataUrl,
+  );
   const [headerImageName, setHeaderImageName] = useState<string | null>(null);
   const [headerError, setHeaderError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const isUsingCustomHeader = headerImageName !== null;
 
   // Cancel in-flight preview requests when the user keeps typing/dragging.
   // Otherwise responses arrive out of order and the rendered image jitters
@@ -184,8 +200,11 @@ export function LeilaLinkedInDesignTool({ initialConfig }: DesignToolProps) {
     reader.readAsDataURL(file);
   }
 
+  /** Revert to the creator-default header (Leila_Header.png). Doesn't
+   *  drop the override entirely — the sandbox always previews against
+   *  *some* header so it stays representative of cron output. */
   function clearHeaderImage() {
-    setHeaderImageDataUrl(null);
+    setHeaderImageDataUrl(defaultHeaderImageDataUrl);
     setHeaderImageName(null);
     setHeaderError(null);
     if (fileInputRef.current) {
@@ -382,7 +401,7 @@ export function LeilaLinkedInDesignTool({ initialConfig }: DesignToolProps) {
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={headerImageDataUrl}
-                        alt="Custom header preview"
+                        alt="Header preview"
                         className="w-full h-full object-contain"
                       />
                     </div>
@@ -391,7 +410,7 @@ export function LeilaLinkedInDesignTool({ initialConfig }: DesignToolProps) {
                       className="size-14 rounded-md border flex items-center justify-center text-[10px] text-[var(--overview-fg)]/40 shrink-0"
                       style={{ borderColor: "var(--card-warm-border)" }}
                     >
-                      default
+                      missing
                     </div>
                   )}
                   <div className="flex flex-col gap-1.5 min-w-0 flex-1">
@@ -404,9 +423,9 @@ export function LeilaLinkedInDesignTool({ initialConfig }: DesignToolProps) {
                         className="gap-1.5 h-8"
                       >
                         <UploadIcon className="size-3.5" />
-                        {headerImageDataUrl ? "Replace" : "Upload"}
+                        {isUsingCustomHeader ? "Replace" : "Upload custom"}
                       </Button>
-                      {headerImageDataUrl && (
+                      {isUsingCustomHeader && (
                         <Button
                           type="button"
                           variant="ghost"
@@ -415,13 +434,14 @@ export function LeilaLinkedInDesignTool({ initialConfig }: DesignToolProps) {
                           className="gap-1.5 h-8"
                         >
                           <XIcon className="size-3.5" />
-                          Clear
+                          Revert to default
                         </Button>
                       )}
                     </div>
                     <span className="text-[11px] text-[var(--overview-fg)]/55 truncate">
-                      {headerImageName ??
-                        "Using public/ig-pipeline/Header.png (Alex's default)"}
+                      {isUsingCustomHeader
+                        ? `Custom: ${headerImageName}`
+                        : "Default: Leila_Header.png (matches what the cron renders)"}
                     </span>
                   </div>
                 </div>

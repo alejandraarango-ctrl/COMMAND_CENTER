@@ -7,6 +7,8 @@
  * client component since it's stateful + hits /api/templates/preview.
  */
 
+import path from "path";
+import fs from "fs/promises";
 import Link from "next/link";
 import { ArrowLeftIcon } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
@@ -19,6 +21,11 @@ import {
 } from "@/lib/template-types";
 
 export const dynamic = "force-dynamic";
+
+// Path is relative to the dashboard cwd (Render and `npm start` both run
+// from the dashboard root). Same convention as the generate route's
+// PLATFORM_HEADER_PATHS.
+const LEILA_HEADER_REL_PATH = "public/ig-pipeline/Leila_Header.png";
 
 async function getStartingConfig(): Promise<TemplateConfig | null> {
   // Read directly from Supabase rather than going through /api/templates,
@@ -41,8 +48,23 @@ async function getStartingConfig(): Promise<TemplateConfig | null> {
   };
 }
 
+/** Read the Leila header PNG and return it as a data URL. The sandbox
+ *  uses this as its baseline so the preview matches what the cron renders
+ *  in production (which is the same file, read from disk). */
+async function getLeilaHeaderDataUrl(): Promise<string | null> {
+  try {
+    const buf = await fs.readFile(path.join(process.cwd(), LEILA_HEADER_REL_PATH));
+    return `data:image/png;base64,${buf.toString("base64")}`;
+  } catch {
+    return null;
+  }
+}
+
 export default async function LeilaLinkedInDesignPage() {
-  const startingConfig = await getStartingConfig();
+  const [startingConfig, defaultHeaderDataUrl] = await Promise.all([
+    getStartingConfig(),
+    getLeilaHeaderDataUrl(),
+  ]);
 
   return (
     <AppShell>
@@ -63,7 +85,10 @@ export default async function LeilaLinkedInDesignPage() {
         </div>
       </div>
 
-      <LeilaLinkedInDesignTool initialConfig={startingConfig} />
+      <LeilaLinkedInDesignTool
+        initialConfig={startingConfig}
+        defaultHeaderImageDataUrl={defaultHeaderDataUrl}
+      />
     </AppShell>
   );
 }

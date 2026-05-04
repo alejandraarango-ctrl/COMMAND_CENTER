@@ -27,6 +27,25 @@ import { verifyApiAuth } from "@/lib/auth";
 import type { TemplateConfig } from "@/lib/template-types";
 import { DEFAULT_TEMPLATE_CONFIG, validateTemplateConfig } from "@/lib/template-types";
 
+// Per-creator header image overrides. The square renderer's default is
+// Alex's Header.png in public/ig-pipeline; anything in this map wins for
+// that platform. Loaded once and cached per-process — these files don't
+// change at runtime, and re-reading on every cron call would needlessly
+// thrash the disk.
+const PLATFORM_HEADER_PATHS: Record<string, string> = {
+  linkedin_leila: "public/ig-pipeline/Leila_Header.png",
+};
+const headerBufferCache = new Map<string, Buffer>();
+async function loadPlatformHeader(platform: string): Promise<Buffer | undefined> {
+  const rel = PLATFORM_HEADER_PATHS[platform];
+  if (!rel) return undefined;
+  const cached = headerBufferCache.get(rel);
+  if (cached) return cached;
+  const buf = await fs.readFile(path.join(process.cwd(), rel));
+  headerBufferCache.set(rel, buf);
+  return buf;
+}
+
 export async function POST(req: NextRequest) {
   if (!(await verifyApiAuth(req))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -96,6 +115,13 @@ export async function POST(req: NextRequest) {
       fbTemplateConfig = { ...DEFAULT_TEMPLATE_CONFIG, ...validateTemplateConfig(template.config as Record<string, unknown>) };
     }
 
+    // Resolve the per-creator header image up front, so we don't re-read
+    // from disk inside the per-tweet loop. Falls back to the renderer's
+    // hardcoded Header.png default when this platform has no override.
+    const platformHeaderBuffer = usesSquareTemplate
+      ? await loadPlatformHeader(platform)
+      : undefined;
+
     // Temp directory for intermediate files (TikTok needs PNG→MP4 conversion,
     // Facebook just renders directly to a buffer). We wrap the per-item work
     // in try/finally so the directory is removed even if a tweet throws.
@@ -125,7 +151,11 @@ export async function POST(req: NextRequest) {
             // don't collide with Facebook's (same tweet text could be used
             // for both creators in the future, and Buffer needs distinct
             // signed URLs anyway).
-            const pngBuffer = await renderSquareQuoteCard(normalized, fbTemplateConfig!);
+            const pngBuffer = await renderSquareQuoteCard(
+              normalized,
+              fbTemplateConfig!,
+              { headerImageBuffer: platformHeaderBuffer },
+            );
             const storagePath = `${platform}/tweet-${tweet.id}.png`;
 
             const { error: uploadError } = await supabase.storage
