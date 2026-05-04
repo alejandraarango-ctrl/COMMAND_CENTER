@@ -39,13 +39,17 @@ interface CronJobDef {
 // Matches the cron jobs defined in render.yaml and the CRON_MODULES map
 // in /api/cron/run/route.ts.
 const CRON_JOBS: CronJobDef[] = [
-  { name: "threads-cron", label: "Threads", schedule: "0 11 * * *" },
+  { name: "threads-cron", label: "Threads (Alex)", schedule: "0 11 * * *" },
+  { name: "threads-leila-cron", label: "Threads (Leila)", schedule: "0 11 * * *" },
   { name: "tiktok-pipeline", label: "TikTok Pipeline", schedule: "0 12 * * *" },
   { name: "tiktok-bank-pipeline", label: "TikTok Bank", schedule: "0 14 * * *" },
   { name: "facebook-pipeline", label: "Facebook Pipeline", schedule: "0 13 * * *" },
   { name: "instagram-pipeline", label: "Instagram Pipeline", schedule: "30 11 * * *" },
   { name: "youtube-cron", label: "YouTube", schedule: "0 */4 * * *" },
-  { name: "linkedin-cron", label: "LinkedIn", schedule: "0 */4 * * *" },
+  // name MUST match render.yaml + CRON_MODULES in /api/cron/run.
+  // Schedule below is the original 4am UTC slot — render.yaml currently
+  // uses a leap-day pause expression, but this list shows operator intent.
+  { name: "linkedin-pipeline", label: "LinkedIn", schedule: "0 12 * * *" },
 ];
 
 type JobStatus = "pending" | "running" | "success" | "failed";
