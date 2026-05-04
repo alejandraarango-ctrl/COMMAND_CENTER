@@ -72,10 +72,9 @@ export default async function LeilaLinkedInPage() {
         lastRun={lastRun}
       />
 
-      {/* Temporary entry point to the design sandbox — lets the operator
-          iterate on Leila-specific quote-card visuals without touching the
-          live Facebook template Alex's pipelines also read. Remove this
-          card once the design lands in the cron. */}
+      {/* Sandbox entry point. Background/text/header are now locked in
+          the cron path; this page survives as a preview tool for any
+          further visual iteration the operator wants to do. */}
       <Link
         href="/leila/linkedin/design"
         className="group mt-4 flex items-center justify-between gap-3 rounded-xl border px-5 py-4 transition-colors hover:bg-white/[0.02]"
@@ -102,8 +101,8 @@ export default async function LeilaLinkedInPage() {
               Graphics design sandbox
             </div>
             <div className="text-[12px] text-[var(--overview-fg)]/55">
-              Iterate on Leila&apos;s LinkedIn quote-card template — live
-              preview, no save (temporary).
+              Preview the locked-in Leila design (black bg, white text,
+              Leila_Header.png) and experiment with other knobs.
             </div>
           </div>
         </div>

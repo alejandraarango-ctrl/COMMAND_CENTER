@@ -564,14 +564,15 @@ export function LeilaLinkedInDesignTool({
         <p className="text-[11px] text-[var(--overview-fg)]/45 leading-relaxed">
           Preview is live (debounced 250ms). Output is the same{" "}
           <code className="font-mono">renderSquareQuoteCard</code> the cron
-          uses, so what you see here is exactly what Buffer would receive.
-          Saving back to the database is intentionally disabled — the cron
-          reads Alex&apos;s Facebook template, and editing it would change
-          Alex&apos;s renders too. Use{" "}
+          uses, so what you see here matches what Buffer would receive.{" "}
           <span className="text-[var(--overview-fg)]/65">
-            Copy config JSON
+            Three things are locked in production:
           </span>{" "}
-          and hand off when ready.
+          background <code>#000000</code>, text <code>#ffffff</code>, and
+          the Leila_Header.png header — those are applied automatically in
+          the cron path and don&apos;t need a config save. Other knobs
+          (typography, padding, accent bar) stay sandbox-only — copy the
+          config and hand it off if you want them wired in.
         </p>
       </div>
     </div>

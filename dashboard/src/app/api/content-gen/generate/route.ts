@@ -113,6 +113,20 @@ export async function POST(req: NextRequest) {
       // Merge with defaults so any missing fields (e.g. paddingLeft vs old
       // single "padding") fall back to the locked-in values.
       fbTemplateConfig = { ...DEFAULT_TEMPLATE_CONFIG, ...validateTemplateConfig(template.config as Record<string, unknown>) };
+
+      // Per-creator overrides on top of Alex's Facebook template. These
+      // are the *locked-in* deltas — the operator decided on them in the
+      // design sandbox and they stay constant regardless of any future
+      // edits to Alex's Facebook template config. Anything else (padding,
+      // typography, alignment) keeps inheriting from FB so that broad
+      // layout changes apply to both creators by default.
+      if (platform === "linkedin_leila") {
+        fbTemplateConfig = {
+          ...fbTemplateConfig,
+          backgroundColor: "#000000",
+          textColor: "#ffffff",
+        };
+      }
     }
 
     // Resolve the per-creator header image up front, so we don't re-read
