@@ -61,41 +61,42 @@ services:
   # These are placeholders.
 
   # 2nd channel (Hormozi Highlights) — YOUTUBE_* vars are repurposed for the 2nd channel, see naming-debt TODO.
-  - type: cron
-    name: youtube-second-cron
-    runtime: python
-    buildCommand: pip install -r requirements.txt && pip install -e .
-    startCommand: python -m cron.youtube_cron
-    # Daily at 10:00 UTC = 03:00 PDT / 02:00 PST. Chosen because it's
-    # pre-work-hours local time and because MIN_LEAD_MINUTES=30 will push
-    # assignments into the 12:00 UTC canonical slot or later (the 00:00,
-    # 02:24, 04:48, 07:12, 09:36 slots are all in the past by then).
-    # Staggered against the 11:00/11:30 UTC crons below.
-    schedule: "0 10 * * *"
-    envVars:
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_SERVICE_KEY
-        sync: false
-      - key: YOUTUBE_CLIENT_ID
-        sync: false
-      - key: YOUTUBE_CLIENT_SECRET
-        sync: false
-      - key: YOUTUBE_REFRESH_TOKEN
-        sync: false
-      # Flip to "1" to log would-be videos.update payloads without writing.
-      - key: YOUTUBE_STUDIO_DRY_RUN
-        sync: false
-      # Override the default 30-minute lead time (rarely needed).
-      - key: YOUTUBE_STUDIO_MIN_LEAD_MINUTES
-        sync: false
-      # If set, validate_credentials asserts the token owns this channel —
-      # guards against a misrouted refresh token.
-      - key: YOUTUBE_CHANNEL_ID
-        sync: false
-      # Powers the Sonnet title-cleanup pass. Missing = regex-only cleanup.
-      - key: ANTHROPIC_API_KEY
-        sync: false
+  # TEMPORARILY DEACTIVATED: suspended on Render. Uncomment to re-enable.
+  # - type: cron
+  #   name: youtube-second-cron
+  #   runtime: python
+  #   buildCommand: pip install -r requirements.txt && pip install -e .
+  #   startCommand: python -m cron.youtube_cron
+  #   # Daily at 10:00 UTC = 03:00 PDT / 02:00 PST. Chosen because it's
+  #   # pre-work-hours local time and because MIN_LEAD_MINUTES=30 will push
+  #   # assignments into the 12:00 UTC canonical slot or later (the 00:00,
+  #   # 02:24, 04:48, 07:12, 09:36 slots are all in the past by then).
+  #   # Staggered against the 11:00/11:30 UTC crons below.
+  #   schedule: "0 10 * * *"
+  #   envVars:
+  #     - key: SUPABASE_URL
+  #       sync: false
+  #     - key: SUPABASE_SERVICE_KEY
+  #       sync: false
+  #     - key: YOUTUBE_CLIENT_ID
+  #       sync: false
+  #     - key: YOUTUBE_CLIENT_SECRET
+  #       sync: false
+  #     - key: YOUTUBE_REFRESH_TOKEN
+  #       sync: false
+  #     # Flip to "1" to log would-be videos.update payloads without writing.
+  #     - key: YOUTUBE_STUDIO_DRY_RUN
+  #       sync: false
+  #     # Override the default 30-minute lead time (rarely needed).
+  #     - key: YOUTUBE_STUDIO_MIN_LEAD_MINUTES
+  #       sync: false
+  #     # If set, validate_credentials asserts the token owns this channel —
+  #     # guards against a misrouted refresh token.
+  #     - key: YOUTUBE_CHANNEL_ID
+  #       sync: false
+  #     # Powers the Sonnet title-cleanup pass. Missing = regex-only cleanup.
+  #     - key: ANTHROPIC_API_KEY
+  #       sync: false
 
   - type: cron
     name: tiktok-pipeline
