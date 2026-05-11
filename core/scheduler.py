@@ -72,13 +72,18 @@ def process_due_posts(platform_client, platform: str) -> int:
         if not mark_schedule_picked_up(schedule_id):
             logger.info("Schedule %s already claimed by another worker, skipping", schedule_id)
             continue
-        # Set status to "publishing" so the dashboard shows it's in progress
-        update_post(post_id, status="publishing")
 
         # Each post is wrapped in its own try/except so one failure doesn't
         # stop the rest of the batch from being processed. If post #2 of 5
-        # fails, posts #3-5 still get published.
+        # fails, posts #3-5 still get published. The "publishing" status
+        # update lives INSIDE the try block so a transient DB hiccup there
+        # (e.g. update_post raising RuntimeError because the row was deleted
+        # between get_due_schedules and now) gets caught and tallied like
+        # any other per-post failure, instead of bubbling up and aborting
+        # the rest of the batch. The schedule has already been claimed at
+        # this point, so the stale-pickup reset will recover it after 30 min.
         try:
+            update_post(post_id, status="publishing")
             platform_post_id = platform_client.create_post(post)
             update_post(
                 post_id,

@@ -164,12 +164,26 @@ def _process_group(client, storage_path: str, group: list[dict]) -> str:
         # Mirror sentAt into posts.published_at the first time we see it set,
         # independent of whether the group is ready to delete — this keeps the
         # posts view in sync with Buffer's publish state as soon as it flips.
+        #
+        # update_post() now raises RuntimeError on a zero-row UPDATE (missing
+        # row, RLS rejection, transient outage). Without this guard, a single
+        # bad row would abort _process_group via main()'s except clause, mark
+        # the whole group as errored, and prevent the file from being deleted
+        # even though every OTHER row in the group is in good shape. Treat
+        # the mirror as best-effort: log, continue with the publish check,
+        # and let tomorrow's run retry the same row.
         if sent_at is not None and not row.get("published_at"):
-            update_post(
-                row["id"],
-                status="published",
-                published_at=sent_at.isoformat(),
-            )
+            try:
+                update_post(
+                    row["id"],
+                    status="published",
+                    published_at=sent_at.isoformat(),
+                )
+            except RuntimeError as e:
+                logger.warning(
+                    "Could not mirror sentAt to post %s (%s): %s — continuing; tomorrow's run will retry",
+                    row["id"], row.get("platform"), e,
+                )
 
         if sent_at is None:
             return "queued"

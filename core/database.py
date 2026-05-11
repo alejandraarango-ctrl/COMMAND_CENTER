@@ -156,12 +156,35 @@ def _reset_stale_pickups(platform: str) -> int:
     )
 
     for schedule in stale:
+        # Order matters and is intentional: release the schedule FIRST so
+        # the next get_due_schedules() pass can re-emit it. If we reversed
+        # the order — flip the post back to "scheduled" first, then release
+        # the schedule — a failure on the second write would orphan the
+        # row: this function's SELECT requires posts.status = "publishing",
+        # so a stuck "scheduled" post with picked_up_at set would never be
+        # picked up again by this branch.
+        #
+        # The two writes are not transactional. If the schedule release
+        # succeeds and the post update fails, we accept the partial state:
+        # the schedule is now claimable, the post is still "publishing",
+        # and the next process_due_posts() call will claim the schedule
+        # and call update_post(post_id, status="publishing") — an idempotent
+        # write on a row already in that state. The system self-heals on
+        # the next pass. We log the inconsistency so it shows up in Render
+        # output if a real DB problem ever causes it to recur.
         client.table("schedules").update(
             {"picked_up_at": None}
         ).eq("id", schedule["id"]).execute()
-        client.table("posts").update(
-            {"status": "scheduled", "updated_at": datetime.now(timezone.utc).isoformat()}
-        ).eq("id", schedule["post_id"]).execute()
+        try:
+            update_post(schedule["post_id"], status="scheduled")
+        except RuntimeError as e:
+            # Don't let one stuck-post recovery failure abort the rest of
+            # _reset_stale_pickups, or — worse — the whole get_due_schedules
+            # call. The schedule is already released; next run will retry.
+            logger.warning(
+                "Stale-pickup recovery: schedule %s released but post %s status update failed (%s) — next run will retry",
+                schedule["id"], schedule["post_id"], e,
+            )
         logger.warning(
             "Reset stale schedule %s (post %s) — picked up >%d min ago without completing",
             schedule["id"], schedule["post_id"], STALE_PICKUP_MINUTES,

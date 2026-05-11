@@ -1,77 +1,37 @@
 # MEDIA COMMAND CENTER
 
-Social media automation monorepo — one dashboard to manage posting across 6 platforms (YouTube, Instagram, TikTok, LinkedIn, X, Threads).
+## Architecture rules
 
-## Architecture
+- **IMPORTANT: Dashboard and crons communicate ONLY through the Supabase database.** No shared in-process state, no cross-service imports.
+- **YOU MUST implement `PlatformBase`** (from `platforms/base.py`) for any new platform adapter under `platforms/`. Required methods: `create_post`, `upload_media`, `refresh_credentials`, `validate_credentials`, `get_media_constraints`.
+- **Media flow**: Dashboard upload → Supabase Storage → cron reads via `/api/media/[id]`. Don't bypass the API endpoint.
+- **Cron locking**: `core/scheduler.py` claims schedules atomically via `mark_schedule_picked_up()` before publishing. **YOU MUST NOT parallelize post processing or skip the claim step** — overlapping runs would double-publish. Stuck claims auto-reset (see `_reset_stale_pickups` in `core/database.py`).
 
-```
-MEDIA_COMMAND_CENTER/
-├── core/               — Shared Python logic (models, DB, scheduling, retry, media, auth)
-├── platforms/          — One adapter per platform, all implement PlatformBase (strategy pattern)
-├── cron/               — Scheduled background jobs (one per platform, runs on Render)
-├── dashboard/          — Next.js web UI (Clerk auth, Supabase backend)
-├── supabase/           — Supabase CLI config and database migrations (PostgreSQL)
-├── pyproject.toml      — Python project config (Python 3.11+, pydantic, httpx, supabase)
-└── render.yaml         — Deployment config (1 web service + 6 cron jobs on Render)
-```
+## Auth
 
-## Data flow
-
-Dashboard writes posts/schedules to Supabase. Cron jobs (every 4h) read due posts and publish via platform APIs. Dashboard and crons communicate only through the database.
-
-## Key conventions
-
-- **Platform adapters** (`platforms/`) all implement `PlatformBase` from `platforms/base.py` — methods: `create_post`, `upload_media`, `refresh_credentials`, `validate_credentials`, `get_media_constraints`.
-- **Data models** in `core/models.py` use Pydantic: `Post`, `ScheduledPost`, `MediaUploadResult`, `CronRun`.
-- **Database tables**: `posts`, `schedules`, `cron_runs` (see `supabase/migrations/20260412105430_initial_schema.sql`).
-- **Media upload flow**: Dashboard UI upload -> Supabase Storage -> cron reads via `/api/media/[id]`.
-- **Auth**: Clerk for dashboard users, per-platform OAuth/API tokens for platform APIs (stored as env vars on Render).
-
-## Tech stack
-
-- **Backend**: Python 3.11+, Pydantic, httpx, supabase-py
-- **Frontend**: Next.js, TypeScript, Tailwind CSS, shadcn/ui
-- **Database**: Supabase (PostgreSQL + Storage)
-- **Auth**: Clerk
-- **Hosting**: Render (web service + cron jobs)
+- **IMPORTANT: Clerk handles all dashboard authentication. NEVER add Supabase Auth.**
+- **YOU MUST use the Supabase service key (not the anon key) for protected DB operations.**
+- Per-platform OAuth/API tokens are stored as env vars on Render.
+- **YOU MUST guard every dashboard API route with `await verifyApiAuth(req)`** (from `@/lib/auth`). It accepts a Clerk session OR `Authorization: Bearer ${CRON_SECRET}`. Don't call Clerk's `auth()` directly on any route that a cron job also hits.
 
 ## Coding style
 
-### General
+- Write clear comments explaining **why** code exists and how it works — the developer is learning, so be generous with explanations. (This overrides Claude's default "no comments" stance.)
+- File naming: kebab-case in `dashboard/`, snake_case in `core/` / `platforms/` / `cron/`.
+- When logging platform exceptions in cron code, run them through `platform.sanitize_error(exc)` first — raw `logger.error(e)` can leak tokens to Render logs. (DB writes to `cron_runs.error_message` are auto-sanitized.)
 
-- Write clear comments explaining **why** code exists and how it works — the developer is learning, so be generous with explanations.
-- Keep functions small and focused on one thing.
+## Workflow
 
-### File naming
+- **No premature abstraction.** Cut features not in active use; add abstractions only when actually needed. Concrete > flexible.
+- **UI mocks**: when asked for a UI mock, return a reusable Claude Code prompt that another session can implement, not the code itself.
 
-- **Frontend** (`dashboard/`): kebab-case — `post-scheduler.tsx`, `use-posts.ts`
-- **Python** (`core/`, `platforms/`, `cron/`): snake_case — `post_scheduler.py`, `cron_runner.py`
+## Commands Claude can't guess
 
-### Frontend rules
+- Run a cron job locally: `python -m cron.<platform>_pipeline`
+- Lint Python: `ruff check .`
+- Lint frontend: `cd dashboard && npm run lint`
+- Type-check frontend: `cd dashboard && npx tsc --noEmit`
+- Run tests: `pytest`
+- Apply Supabase migrations: `supabase db push`
 
-- Use **server components by default**. Only add `"use client"` when you need hooks, event handlers, or browser APIs.
-- Use **named exports** for components: `export function PostCard() {}` (not `export default`).
-- Use `@/` path alias for imports: `import { PostCard } from "@/components/post-card"`.
-- Use **shadcn/ui** for common UI elements — don't rebuild buttons, dialogs, inputs, etc.
-- Colocate component files near where they're used when possible.
-
-### Design rules
-
-Dark theme using Tailwind's zinc scale with blue-500 as the sole accent color.
-
-- **Background**: `#09090b` (near-black)
-- **Card backgrounds**: `#111113` or `#0a0a0c`
-- **Card borders**: `#1f1f23`
-- **Primary text**: `#fafafa` (off-white)
-- **Secondary/muted text**: `#a1a1aa` (zinc-400)
-- **Placeholder text**: `#52525b` (zinc-600)
-- **Input backgrounds**: `#18181b` (zinc-900)
-- **Input borders**: `#27272a` (zinc-800)
-- **Primary accent** (buttons, links, selected radio): `#3b82f6` (blue-500)
-- **Accent hover**: `#2563eb` (blue-600)
-- **Success green**: `#22c55e` (green-500)
-- **Badge/pill backgrounds**: `#27272a` with `#a1a1aa` text
-- **Selected pill/chip**: `#fafafa` bg with `#09090b` text (inverted)
-- **Unselected pill/chip**: `#27272a` bg with `#fafafa` text
-- **CTA filled button**: `#fafafa` bg with `#09090b` text
-- **CTA outline/ghost button**: transparent with `#fafafa` text and subtle border
+Frontend conventions and design tokens are in `.claude/rules/dashboard.md` (loads when editing `dashboard/**`).

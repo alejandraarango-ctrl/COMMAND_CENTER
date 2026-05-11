@@ -16,6 +16,8 @@ from __future__ import annotations
 import logging
 import os
 
+from core.log_safe import install_log_sanitizer
+
 logger = logging.getLogger(__name__)
 
 
@@ -30,11 +32,20 @@ def log_env_diagnostics(
     fail, and this line flags the likely cause before the real exception
     stack trace.
 
+    Side effect: installs the SanitizingLogFilter on the root logger's
+    handlers before logging anything. Every cron calls this as the first
+    line of ``main()`` (after ``logging.basicConfig``), so wiring the
+    sanitizer in here means each cron picks up redaction automatically
+    without per-file edits. ``install_log_sanitizer`` is idempotent, so
+    repeated calls within a process are safe.
+
     Args:
         job_name: Human-readable pipeline name (e.g. "tiktok-bank-pipeline").
         required: Env vars the pipeline needs to run at all.
         optional: Env vars with sensible defaults — missing ones are info-only.
     """
+    install_log_sanitizer()
+
     def _status(key: str) -> str:
         # Treat empty string the same as unset: Render's UI sometimes leaves
         # `sync: false` entries with a blank value, which `os.environ.get()`

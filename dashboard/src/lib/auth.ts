@@ -18,10 +18,15 @@ export async function verifyApiAuth(request: Request): Promise<boolean> {
   const authHeader = request.headers.get("authorization");
   const secret = process.env.CRON_SECRET;
   if (authHeader && secret) {
-    const token = authHeader.replace("Bearer ", "");
-    // Constant-time compare — avoids the timing side-channel that `===`
-    // exposes when two strings are compared character-by-character.
-    if (timingSafeEqual(token, secret)) {
+    // Compare the FULL header against the full expected value, including
+    // the "Bearer " prefix. This intentionally mirrors the comparison in
+    // `dashboard/src/middleware.ts:isBearerAuthorized` — having both call
+    // sites do the exact same thing means a malformed header (lowercase
+    // "bearer", missing space, leading whitespace) is rejected by both
+    // layers instead of by only one of them. Constant-time compare
+    // avoids the timing side-channel that `===` exposes when two strings
+    // are compared character-by-character.
+    if (timingSafeEqual(authHeader, `Bearer ${secret}`)) {
       return true;
     }
   }
