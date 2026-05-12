@@ -227,31 +227,41 @@ export async function POST(req: NextRequest) {
     .select("id")
     .single();
 
+  // Track the TikTok insert outcome but DON'T bail on a unique-violation.
+  // Buffer has already accepted the TikTok post (we have tiktokBufferId),
+  // and the user still wants the YouTube / LinkedIn fan-out to run. The
+  // 20260512000000 migration removes manual_upload rows from the dedup
+  // index, so this branch is rare going forward — but we keep the
+  // graceful-continue behaviour so any other partial unique index that
+  // matches (existing or future) doesn't shortcut the fan-out.
+  //
+  // From the user's POV a dedup is not a failure: Buffer queued the
+  // post, only the bookkeeping row was skipped. We log a warning but
+  // don't surface anything to the UI so the slot shows a clean
+  // "uploaded" state. Non-dedup DB errors still bail with 500: those
+  // indicate something more serious (schema drift, connection failure)
+  // and shouldn't be silently masked.
+  const tiktokPostId: string | undefined = tiktokPost?.id;
   if (tiktokInsertError || !tiktokPost) {
-    // Buffer has already accepted the post — rolling back its queue is
-    // fiddly and risky. Better to leave the video queued and surface
-    // the Buffer ID so the user can reconcile manually.
     if (isUniqueViolation(tiktokInsertError)) {
+      console.warn(
+        "TikTok post insert deduplicated (Buffer id=%s) — continuing fan-out",
+        tiktokBufferId,
+      );
+    } else {
+      console.error(
+        "TikTok post insert failed (Buffer id=%s): %s",
+        tiktokBufferId,
+        tiktokInsertError?.message,
+      );
       return NextResponse.json(
         {
-          error: "A TikTok post with this exact caption already exists.",
+          error: `Post insert failed: ${tiktokInsertError?.message}`,
           tiktokBufferId,
         },
-        { status: 409 },
+        { status: 500 },
       );
     }
-    console.error(
-      "TikTok post insert failed (Buffer id=%s): %s",
-      tiktokBufferId,
-      tiktokInsertError?.message,
-    );
-    return NextResponse.json(
-      {
-        error: `Post insert failed: ${tiktokInsertError?.message}`,
-        tiktokBufferId,
-      },
-      { status: 500 },
-    );
   }
 
   // Fan out to Buffer's YouTube channel. Failures here are reported as
@@ -295,18 +305,25 @@ export async function POST(req: NextRequest) {
       },
     });
     if (ytInsertError) {
+      // Dedup is a bookkeeping issue, not a failed upload — Buffer
+      // already accepted the post and returned a buffer id. Keep the
+      // buffer id and don't surface a *Error: from the user's POV the
+      // upload succeeded. Non-dedup DB errors still surface (schema
+      // drift, connection failure, etc. are worth investigating).
       if (isUniqueViolation(ytInsertError)) {
-        youtubeError =
-          "A YouTube post with this exact caption already exists.";
+        console.warn(
+          "YouTube post insert deduplicated (Buffer id=%s)",
+          youtubeBufferId,
+        );
       } else {
         youtubeError = `YouTube post insert failed: ${ytInsertError.message}`;
+        console.error(
+          "YouTube post insert failed (Buffer id=%s): %s",
+          youtubeBufferId,
+          ytInsertError.message,
+        );
+        youtubeBufferId = undefined;
       }
-      console.error(
-        "YouTube post insert failed (Buffer id=%s): %s",
-        youtubeBufferId,
-        ytInsertError.message,
-      );
-      youtubeBufferId = undefined;
     }
   }
 
@@ -347,24 +364,29 @@ export async function POST(req: NextRequest) {
       },
     });
     if (liInsertError) {
+      // Same dedup-is-not-a-failure treatment as YouTube above. Buffer
+      // already queued the LinkedIn post; we just couldn't insert the
+      // tracking row.
       if (isUniqueViolation(liInsertError)) {
-        linkedinError =
-          "A LinkedIn post with this exact caption already exists.";
+        console.warn(
+          "LinkedIn post insert deduplicated (Buffer id=%s)",
+          linkedinBufferId,
+        );
       } else {
         linkedinError = `LinkedIn post insert failed: ${liInsertError.message}`;
+        console.error(
+          "LinkedIn post insert failed (Buffer id=%s): %s",
+          linkedinBufferId,
+          liInsertError.message,
+        );
+        linkedinBufferId = undefined;
       }
-      console.error(
-        "LinkedIn post insert failed (Buffer id=%s): %s",
-        linkedinBufferId,
-        liInsertError.message,
-      );
-      linkedinBufferId = undefined;
     }
   }
 
   return NextResponse.json({
     ok: true,
-    postId: tiktokPost.id,
+    postId: tiktokPostId,
     tiktokBufferId,
     youtubeBufferId,
     youtubeError,

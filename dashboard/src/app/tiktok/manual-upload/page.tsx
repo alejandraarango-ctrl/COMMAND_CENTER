@@ -15,7 +15,7 @@
 import Link from "next/link";
 import { ArrowLeftIcon } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { TikTokManualUploadForm } from "@/components/tiktok-manual-upload-form";
+import { TikTokUploadQueue } from "@/components/tiktok-upload-queue";
 
 export const dynamic = "force-dynamic";
 
@@ -34,12 +34,12 @@ export default function TikTokManualUploadPage() {
           <h1 className="text-xl font-semibold">Manual upload</h1>
           <p className="text-sm text-muted-foreground">
             TikTok + YouTube Shorts + LinkedIn — fan out the same mp4 to all
-            three Buffer channels (next open slot on each).
+            three Buffer channels. Queue up to 30 uploads in parallel.
           </p>
         </div>
       </div>
 
-      <TikTokManualUploadForm />
+      <TikTokUploadQueue />
     </AppShell>
   );
 }

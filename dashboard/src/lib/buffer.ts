@@ -35,9 +35,15 @@ async function bufferRequest<T>(
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({ query, variables }),
-    // Abort after 10s — without this a hung Buffer endpoint stalls the
-    // serverless invocation until Next.js's much higher default kills it.
-    signal: AbortSignal.timeout(10_000),
+    // Abort after 30s. Buffer's GraphQL is normally <1s, but
+    // createPost with a video asset triggers Buffer to server-side
+    // fetch the signed URL we hand it, which can stall briefly under
+    // load and intermittently breach a 10s budget. We don't retry
+    // automatically — Buffer may have already accepted the post by
+    // the time the request appears to time out, so a retry would
+    // double-post. 30s is just a wider envelope to swallow normal
+    // jitter without raising the risk of double-posts.
+    signal: AbortSignal.timeout(30_000),
   });
 
   if (!res.ok) {
