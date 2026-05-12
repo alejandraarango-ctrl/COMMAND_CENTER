@@ -249,6 +249,19 @@ export function TikTokUploadQueue() {
    * The per-slot upload pipeline. Mirrors the original single-form
    * submit() exactly, but scoped to one slot id. Called fire-and-forget
    * from onUploadClick — slots run concurrently.
+   *
+   * Structure: an outer try / finally guarantees the slotRefs entry is
+   * cleaned up on every exit path (success, failure, cancel, thrown
+   * error). Each phase's inner catch only deals with state transitions,
+   * not cleanup — that's the finally's job.
+   *
+   * Cancelled uploads leave a partial Storage object behind (no posts
+   * row gets written, so the cleanup cron's group path can't see it).
+   * Those are reaped by the orphan-sweep branch in
+   * cron/tiktok_storage_cleanup.py (_cleanup_orphans), which runs
+   * daily at 03:00 UTC and deletes unreferenced objects older than
+   * 24h. Worst case: a cancelled upload's bytes linger for up to one
+   * extra day before sweep.
    */
   const startUpload = useCallback(
     async (
@@ -260,138 +273,135 @@ export function TikTokUploadQueue() {
       const refs: SlotRefs = {};
       slotRefs.current.set(slotId, refs);
 
-      // --- Phase 1: sign-url ---
-      const signAbort = new AbortController();
-      refs.signAbort = signAbort;
-
-      let signed: SignUrlResponse;
       try {
-        const res = await fetch("/api/tiktok/manual-upload/sign-url", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            filename: slotFile.name,
-            contentType: slotFile.type || "video/mp4",
-            sizeBytes: slotFile.size,
-          }),
-          signal: signAbort.signal,
-        });
-        const json = (await res.json()) as
-          | (SignUrlResponse & { error?: never })
-          | { error: string };
-        if (!res.ok || !("storagePath" in json)) {
-          const err =
-            "error" in json ? json.error : `Sign-url failed (${res.status})`;
-          throw new Error(err);
-        }
-        signed = json;
-      } catch (err) {
-        // AbortError means cancelSlot has already set the slot to
-        // "cancelled"; don't overwrite that with "failed".
-        if (isCancelled(slotId)) {
-          slotRefs.current.delete(slotId);
+        // --- Phase 1: sign-url ---
+        const signAbort = new AbortController();
+        refs.signAbort = signAbort;
+
+        let signed: SignUrlResponse;
+        try {
+          const res = await fetch("/api/tiktok/manual-upload/sign-url", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              filename: slotFile.name,
+              contentType: slotFile.type || "video/mp4",
+              sizeBytes: slotFile.size,
+            }),
+            signal: signAbort.signal,
+          });
+          const json = (await res.json()) as
+            | (SignUrlResponse & { error?: never })
+            | { error: string };
+          if (!res.ok || !("storagePath" in json)) {
+            const err =
+              "error" in json
+                ? json.error
+                : `Sign-url failed (${res.status})`;
+            throw new Error(err);
+          }
+          signed = json;
+        } catch (err) {
+          // AbortError means cancelSlot already moved the slot to
+          // "cancelled" — leave it alone. Otherwise mark failed.
+          if (!isCancelled(slotId)) {
+            updateSlot(slotId, {
+              phase: "failed",
+              message: `Failed to get upload token: ${(err as Error).message}`,
+            });
+          }
           return;
         }
+
+        // --- Phase 2: single-PUT upload ---
         updateSlot(slotId, {
-          phase: "failed",
-          message: `Failed to get upload token: ${(err as Error).message}`,
+          phase: "uploading",
+          message: "Uploading to Supabase Storage…",
         });
-        slotRefs.current.delete(slotId);
-        return;
-      }
 
-      // --- Phase 2: single-PUT upload ---
-      updateSlot(slotId, {
-        phase: "uploading",
-        message: "Uploading to Supabase Storage…",
-      });
+        const { xhr, done } = startSignedPut(
+          slotFile,
+          signed,
+          (uploaded, total) => {
+            updateSlot(slotId, {
+              bytesUploaded: uploaded,
+              bytesTotal: total,
+            });
+          },
+        );
+        refs.xhr = xhr;
 
-      const { xhr, done } = startSignedPut(
-        slotFile,
-        signed,
-        (uploaded, total) => {
-          updateSlot(slotId, { bytesUploaded: uploaded, bytesTotal: total });
-        },
-      );
-      refs.xhr = xhr;
-
-      try {
-        await done;
-      } catch (err) {
-        if (isCancelled(slotId)) {
-          // Already set to cancelled by cancelSlot — xhr.abort() fired
-          // onabort which rejected the Promise, but the user's intent
-          // is recorded.
-          // TODO(orphan-leak): the partial (or empty) Storage object
-          // at signed.storagePath stays around.
-          // cron/tiktok_storage_cleanup.py groups by posts.media_urls
-          // and we never wrote a posts row, so it won't be reaped.
-          // Known minor leak — accepted per design. Follow-up: an
-          // orphan-cleanup endpoint scanning manual/<userId>/*.
-          slotRefs.current.delete(slotId);
+        try {
+          await done;
+        } catch (err) {
+          // xhr.abort() rejected via onabort -> "cancelled" already
+          // set by cancelSlot. Otherwise this is a real network /
+          // Supabase failure.
+          if (!isCancelled(slotId)) {
+            updateSlot(slotId, {
+              phase: "failed",
+              message: `Upload failed: ${(err as Error).message}`,
+            });
+          }
           return;
         }
-        updateSlot(slotId, {
-          phase: "failed",
-          message: `Upload failed: ${(err as Error).message}`,
-        });
-        slotRefs.current.delete(slotId);
-        return;
-      }
 
-      // --- Phase 3: finalize ---
-      const finalizeAbort = new AbortController();
-      refs.finalizeAbort = finalizeAbort;
-      updateSlot(slotId, {
-        phase: "finalizing",
-        message: "Queueing on Buffer…",
-      });
+        // --- Phase 3: finalize ---
+        const finalizeAbort = new AbortController();
+        refs.finalizeAbort = finalizeAbort;
+        updateSlot(slotId, {
+          phase: "finalizing",
+          message: "Queueing on Buffer…",
+        });
 
-      try {
-        const res = await fetch("/api/tiktok/manual-upload", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            storagePath: signed.storagePath,
-            title: slotTitle,
-            caption: slotCaption,
-          }),
-          signal: finalizeAbort.signal,
-        });
-        const data = (await res.json()) as FinalizeResponse;
-        if (!res.ok || !data.ok) {
-          throw new Error(data.error ?? `Finalize failed (${res.status})`);
+        try {
+          const res = await fetch("/api/tiktok/manual-upload", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              storagePath: signed.storagePath,
+              title: slotTitle,
+              caption: slotCaption,
+            }),
+            signal: finalizeAbort.signal,
+          });
+          const data = (await res.json()) as FinalizeResponse;
+          if (!res.ok || !data.ok) {
+            throw new Error(data.error ?? `Finalize failed (${res.status})`);
+          }
+          // DB-dedup bookkeeping is swallowed in the route on all
+          // three platforms — by the time we get here, *Error fields
+          // only carry genuine Buffer-side failures (e.g. Buffer
+          // rejected the post, channel not connected). So anyError
+          // here means at least one platform genuinely didn't queue.
+          const anyError = !!(data.youtubeError || data.linkedinError);
+          updateSlot(slotId, {
+            phase: "success",
+            tiktokBufferId: data.tiktokBufferId,
+            youtubeBufferId: data.youtubeBufferId,
+            youtubeError: data.youtubeError,
+            linkedinBufferId: data.linkedinBufferId,
+            linkedinError: data.linkedinError,
+            message: anyError
+              ? "Uploaded, but one platform failed to queue."
+              : "Uploaded successfully.",
+          });
+        } catch (err) {
+          // Caveat on cancel-during-finalize: Buffer may have queued
+          // the TikTok post before the abort landed. We don't try to
+          // reconcile — the "Buffer state unknown" message that
+          // cancelSlot set tells the user to check manually.
+          if (!isCancelled(slotId)) {
+            updateSlot(slotId, {
+              phase: "failed",
+              message: `Finalize failed: ${(err as Error).message}`,
+            });
+          }
         }
-        // DB-dedup bookkeeping is now swallowed in the route on all
-        // three platforms — by the time we get here, *Error fields
-        // only carry genuine Buffer-side failures (e.g. Buffer
-        // rejected the post, channel not connected). So anyError
-        // here means at least one platform genuinely didn't queue.
-        const anyError = !!(data.youtubeError || data.linkedinError);
-        updateSlot(slotId, {
-          phase: "success",
-          tiktokBufferId: data.tiktokBufferId,
-          youtubeBufferId: data.youtubeBufferId,
-          youtubeError: data.youtubeError,
-          linkedinBufferId: data.linkedinBufferId,
-          linkedinError: data.linkedinError,
-          message: anyError
-            ? "Uploaded, but one platform failed to queue."
-            : "Uploaded successfully.",
-        });
-      } catch (err) {
-        if (isCancelled(slotId)) {
-          // Caveat: Buffer may have queued the TikTok post before the
-          // abort landed. We don't try to reconcile — the message set
-          // by cancelSlot tells the user to check manually.
-          slotRefs.current.delete(slotId);
-          return;
-        }
-        updateSlot(slotId, {
-          phase: "failed",
-          message: `Finalize failed: ${(err as Error).message}`,
-        });
       } finally {
+        // Single cleanup site for every exit path. Even an unhandled
+        // throw above (which would propagate to the fire-and-forget
+        // void) clears the ref entry.
         slotRefs.current.delete(slotId);
       }
     },
@@ -408,10 +418,7 @@ export function TikTokUploadQueue() {
     if (file.size > MAX_FILE_BYTES) return;
     if (!title.trim() || !caption.trim()) return;
 
-    const id =
-      typeof crypto !== "undefined" && "randomUUID" in crypto
-        ? crypto.randomUUID()
-        : `slot-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const id = crypto.randomUUID();
 
     const newSlot: UploadSlot = {
       id,
