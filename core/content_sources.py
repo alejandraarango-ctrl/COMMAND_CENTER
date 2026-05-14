@@ -24,6 +24,7 @@ import logging
 import os
 import random
 from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 
 import httpx
 
@@ -116,6 +117,10 @@ def fetch_apify_tweets(
     drop_bad_date = 0
     drop_out_of_window = 0
     drop_low_likes = 0
+    # First raw `createdAt` value we fail to parse, surfaced in the summary
+    # log when bad_date > 0. Lets us debug any future format change in one
+    # cron run without re-deploying additional diagnostics.
+    sample_bad_date: str | None = None
 
     # If Apify returned anything, log the keys of the first item once per
     # call. This catches schema drift cheaply — e.g. if Apify renames
@@ -133,10 +138,11 @@ def fetch_apify_tweets(
         if not text.strip():
             drop_empty_text += 1
             continue
-        try:
-            tweet_time = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
-        except (ValueError, TypeError):
+        tweet_time = _parse_apify_datetime(created_at)
+        if tweet_time is None:
             drop_bad_date += 1
+            if sample_bad_date is None:
+                sample_bad_date = created_at
             continue
         if tweet_time < cutoff:
             drop_out_of_window += 1
@@ -151,23 +157,36 @@ def fetch_apify_tweets(
             drop_low_likes += 1
             continue
 
+        # _parsed_dt stays on the dict only long enough to sort by it; we
+        # strip it before returning so the public shape is unchanged. Sorting
+        # on the raw string would lex-sort RFC 2822 dates incorrectly (e.g.
+        # "Apr" < "Aug" but April is later in some years), so the parsed
+        # datetime is the only correct sort key.
         tweets.append({
             "id": str(item.get("id", "")),
             "text": text,
             "created_at": created_at,
             "url": str(item.get("url", "")),
             "like_count": like_count,
+            "_parsed_dt": tweet_time,
         })
 
-    tweets.sort(key=lambda t: t["created_at"], reverse=True)
+    tweets.sort(key=lambda t: t["_parsed_dt"], reverse=True)
+    for t in tweets:
+        del t["_parsed_dt"]
 
     # Diagnostic summary — emit even when raw_count==0 so we can see Apify
-    # returned an empty dataset rather than a parsing failure.
+    # returned an empty dataset rather than a parsing failure. When any
+    # items were dropped for bad dates, include one raw sample value so we
+    # can spot a third format showing up without another round-trip.
+    sample_suffix = (
+        f" sample_bad_date={sample_bad_date!r}" if sample_bad_date is not None else ""
+    )
     logger.info(
-        "Apify raw=%d kept=%d (empty_text=%d, bad_date=%d, out_of_window=%d, low_likes=%d) handle=@%s window=%dh",
+        "Apify raw=%d kept=%d (empty_text=%d, bad_date=%d, out_of_window=%d, low_likes=%d) handle=@%s window=%dh%s",
         raw_count, len(tweets),
         drop_empty_text, drop_bad_date, drop_out_of_window, drop_low_likes,
-        twitter_handle, hours_lookback,
+        twitter_handle, hours_lookback, sample_suffix,
     )
     # Kept for backwards-compat with anything grepping the old phrasing.
     logger.info(
@@ -346,3 +365,33 @@ def _decode_html(text: str) -> str:
         .replace("&#39;", "'")
         .replace("&apos;", "'")
     )
+
+
+def _parse_apify_datetime(value: str) -> datetime | None:
+    """Parse Apify's `createdAt` into a timezone-aware datetime.
+
+    The `apidojo~tweet-scraper` actor emits Twitter's classic RFC 2822-style
+    format (e.g. "Wed Oct 10 20:19:24 +0000 2018"), which datetime.fromisoformat
+    can't handle and used to silently drop every tweet. We try ISO-8601 first
+    (cheap path + forward-compat if Apify ever switches), then fall back to
+    parsedate_to_datetime which is Python's stdlib RFC 2822 parser.
+
+    Returns None on both failures so the caller can count and log the drop.
+    """
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        pass
+    try:
+        dt = parsedate_to_datetime(value)
+    except (ValueError, TypeError):
+        return None
+    # parsedate_to_datetime returns a naive datetime when the input has no
+    # timezone offset. The downstream comparison against the UTC cutoff would
+    # raise TypeError on naive-vs-aware, so coerce missing tz to UTC — matches
+    # Twitter's convention of using +0000.
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
