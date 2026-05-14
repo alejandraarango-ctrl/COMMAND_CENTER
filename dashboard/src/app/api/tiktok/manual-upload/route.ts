@@ -43,6 +43,11 @@ export const dynamic = "force-dynamic";
 // TikTok's 150-char truncation, so we override per-call for LinkedIn.
 const LINKEDIN_CAPTION_LIMIT = 3000;
 
+// X (formerly Twitter) allows 280 chars on a standard tweet. sendToBuffer
+// defaults to TikTok's 150-char truncation, so we override per-call so
+// X posts aren't truncated unnecessarily.
+const X_CAPTION_LIMIT = 280;
+
 // TEMPORARY KILL-SWITCH for the LinkedIn fan-out. When false, uploads still
 // go to TikTok + YouTube Shorts, but the LinkedIn Buffer send + posts-row
 // insert are skipped and the response returns linkedinBufferId=undefined,
@@ -327,6 +332,66 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Fan out to Buffer's X channel (acq_official handle). Same partial-
+  // success contract as YouTube — TikTok is already queued and the user
+  // explicitly opted in to this fan-out, so failures on the X leg should
+  // not roll back what already succeeded. Buffer's GraphQL channels API
+  // reports the X channel under service="x" (post-rebrand string).
+  let xBufferId: string | undefined;
+  let xError: string | undefined;
+  try {
+    const xChannelId = await getChannelId(undefined, "x");
+    xBufferId = await sendToBuffer(
+      xChannelId,
+      caption,
+      signed.signedUrl,
+      "video",
+      { captionLimit: X_CAPTION_LIMIT },
+    );
+  } catch (err) {
+    xError = (err as Error).message;
+    console.error("Buffer X send failed:", xError);
+  }
+
+  // If X succeeded, record its posts row too. Same media_urls so the
+  // cleanup cron groups all rows by storage path and only deletes the
+  // file after every leg's Buffer sentAt has aged past the grace window.
+  if (xBufferId) {
+    const { error: xInsertError } = await supabase.from("posts").insert({
+      platform: "x_acq_official",
+      status: "sent_to_buffer",
+      title,
+      caption,
+      media_type: "video",
+      media_urls: [storagePath],
+      platform_post_id: xBufferId,
+      metadata: {
+        source: "manual_upload",
+        buffer_post_id: xBufferId,
+        storage_cleanup_status: "pending",
+      },
+    });
+    if (xInsertError) {
+      // Dedup is a bookkeeping issue, not a failed upload — same
+      // treatment as the YouTube branch above. Keep the buffer id and
+      // log a warning so the slot still shows "uploaded".
+      if (isUniqueViolation(xInsertError)) {
+        console.warn(
+          "X post insert deduplicated (Buffer id=%s)",
+          xBufferId,
+        );
+      } else {
+        xError = `X post insert failed: ${xInsertError.message}`;
+        console.error(
+          "X post insert failed (Buffer id=%s): %s",
+          xBufferId,
+          xInsertError.message,
+        );
+        xBufferId = undefined;
+      }
+    }
+  }
+
   // Fan out to Buffer's LinkedIn channel. Same partial-success contract
   // as YouTube. Gated behind LINKEDIN_FANOUT_ENABLED so the entire
   // LinkedIn leg can be paused without ripping out the code.
@@ -392,5 +457,7 @@ export async function POST(req: NextRequest) {
     youtubeError,
     linkedinBufferId,
     linkedinError,
+    xBufferId,
+    xError,
   });
 }

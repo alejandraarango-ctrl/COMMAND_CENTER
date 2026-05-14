@@ -100,6 +100,8 @@ type FinalizeResponse = {
   youtubeError?: string;
   linkedinBufferId?: string;
   linkedinError?: string;
+  xBufferId?: string;
+  xError?: string;
   error?: string;
 };
 
@@ -116,6 +118,8 @@ type UploadSlot = {
   youtubeError?: string;
   linkedinBufferId?: string;
   linkedinError?: string;
+  xBufferId?: string;
+  xError?: string;
 };
 
 type SlotRefs = {
@@ -369,12 +373,14 @@ export function TikTokUploadQueue() {
           if (!res.ok || !data.ok) {
             throw new Error(data.error ?? `Finalize failed (${res.status})`);
           }
-          // DB-dedup bookkeeping is swallowed in the route on all
-          // three platforms — by the time we get here, *Error fields
-          // only carry genuine Buffer-side failures (e.g. Buffer
-          // rejected the post, channel not connected). So anyError
-          // here means at least one platform genuinely didn't queue.
-          const anyError = !!(data.youtubeError || data.linkedinError);
+          // DB-dedup bookkeeping is swallowed in the route on every
+          // fan-out leg — by the time we get here, *Error fields only
+          // carry genuine Buffer-side failures (e.g. Buffer rejected
+          // the post, channel not connected). So anyError here means
+          // at least one platform genuinely didn't queue.
+          const anyError = !!(
+            data.youtubeError || data.linkedinError || data.xError
+          );
           updateSlot(slotId, {
             phase: "success",
             tiktokBufferId: data.tiktokBufferId,
@@ -382,6 +388,8 @@ export function TikTokUploadQueue() {
             youtubeError: data.youtubeError,
             linkedinBufferId: data.linkedinBufferId,
             linkedinError: data.linkedinError,
+            xBufferId: data.xBufferId,
+            xError: data.xError,
             message: anyError
               ? "Uploaded, but one platform failed to queue."
               : "Uploaded successfully.",
@@ -651,7 +659,9 @@ function SlotTab({
   onDismiss: () => void;
 }) {
   const inFlight = IN_FLIGHT_PHASES.has(slot.phase);
-  const anyFanoutError = !!(slot.youtubeError || slot.linkedinError);
+  const anyFanoutError = !!(
+    slot.youtubeError || slot.linkedinError || slot.xError
+  );
 
   // Phase-driven background. Mirrors the colors the old single-form
   // status panel used so the visual language stays consistent.
@@ -770,6 +780,9 @@ function SlotTab({
           {slot.linkedinBufferId && (
             <span>LI: {slot.linkedinBufferId}</span>
           )}
+          {slot.xBufferId && (
+            <span>X: {slot.xBufferId}</span>
+          )}
           {slot.youtubeError && (
             <span className="text-red-400 break-words">
               YT failed: {slot.youtubeError}
@@ -778,6 +791,11 @@ function SlotTab({
           {slot.linkedinError && (
             <span className="text-red-400 break-words">
               LI failed: {slot.linkedinError}
+            </span>
+          )}
+          {slot.xError && (
+            <span className="text-red-400 break-words">
+              X failed: {slot.xError}
             </span>
           )}
         </div>

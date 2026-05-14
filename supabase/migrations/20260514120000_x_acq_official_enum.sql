@@ -1,0 +1,13 @@
+-- X (acq_official) fan-out on TikTok manual uploads: enum addition.
+--
+-- Mirrors the precedent set by 20260505000000_linkedin_leila_enum.sql for
+-- linkedin_leila. The TikTok manual-upload route inserts a sibling posts
+-- row per Buffer destination; adding X / Twitter (handle: acq_official) as
+-- a fan-out target needs the enum value present first, otherwise the
+-- insert fails with invalid_text_representation.
+--
+-- Postgres rule: an enum value added in a transaction can't be used in
+-- the same transaction. This migration runs a single ALTER TYPE in its
+-- own transaction; the next migration or runtime insert is what consumes
+-- the new value, so this is safe.
+ALTER TYPE platform_enum ADD VALUE IF NOT EXISTS 'x_acq_official';

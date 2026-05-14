@@ -39,6 +39,11 @@ class Post(BaseModel):
         "threads",
         "threads_leila",
         "linkedin_leila",
+        # acq_official X (Twitter) handle. Used as a fan-out destination on
+        # manual TikTok uploads so each uploaded reel also lands in Buffer's
+        # X queue under the acq_official channel. Added in migration
+        # 20260514120000_x_acq_official_enum.sql.
+        "x_acq_official",
     ]
     # The ID the platform gives back after publishing (e.g. a YouTube video ID).
     # None until the post is actually published.
