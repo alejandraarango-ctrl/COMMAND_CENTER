@@ -336,11 +336,13 @@ export async function POST(req: NextRequest) {
   // success contract as YouTube — TikTok is already queued and the user
   // explicitly opted in to this fan-out, so failures on the X leg should
   // not roll back what already succeeded. Buffer's GraphQL channels API
-  // reports the X channel under service="x" (post-rebrand string).
+  // still reports the X channel under service="twitter" (legacy string,
+  // not "x") even though Twitter rebranded to X; verified by the live
+  // "No x channel connected" error when we previously tried "x".
   let xBufferId: string | undefined;
   let xError: string | undefined;
   try {
-    const xChannelId = await getChannelId(undefined, "x");
+    const xChannelId = await getChannelId(undefined, "twitter");
     xBufferId = await sendToBuffer(
       xChannelId,
       caption,
