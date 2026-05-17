@@ -51,7 +51,16 @@ export function CategorySection({
         }}
       >
         {formats.map((f) => (
-          <FormatCard key={f.id} format={f} color={color} />
+          <FormatCard
+            key={f.id}
+            format={f}
+            color={color}
+            // `breakBefore` forces the card to start a fresh grid row. We
+            // pin it to column 1 explicitly; `auto-fit` may resolve the
+            // grid to 2/3/4 columns depending on viewport width, so we
+            // can't just rely on natural wrapping for the new-row effect.
+            style={f.breakBefore ? { gridColumnStart: 1 } : undefined}
+          />
         ))}
       </div>
     </section>

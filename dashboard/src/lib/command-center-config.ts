@@ -70,6 +70,12 @@ export interface Format {
   // Next.js navigation so the click takes the user to the legacy
   // per-platform automation page.
   href?: string;
+  // When true the card is forced to start a new row in its CategorySection
+  // grid (via `grid-column-start: 1`). Used today for the L1 Q&A card so
+  // it visually separates from the three Short cards above it instead of
+  // sliding into the same row as a fourth column. Optional — most formats
+  // wrap naturally.
+  breakBefore?: boolean;
 }
 
 // Category color tokens. These are intentionally NOT the dashboard's
@@ -174,6 +180,25 @@ export const FORMATS: Format[] = [
     status: "paused",
     creator: "alex",
     platforms: [{ id: "youtube", name: "YouTube" }],
+  },
+  {
+    // L1 Q&A — pipeline doesn't exist yet, but /l1-qa hosts a static
+    // visual map of the planned automation so the design is the source
+    // of truth while the actual cron is being scoped. Status stays
+    // "paused" (no live pulse, not counted in the header's live tally)
+    // and `platforms` is left empty so the card hides its "Publishes
+    // to" eyebrow until destinations are decided. `breakBefore` forces
+    // the card onto its own row in the Short grid — drop the flag
+    // (and flip status to "live") once the workflow ships.
+    id: "l1-qa",
+    name: "L1 Q&A",
+    subtitle: "Automation map",
+    category: "short",
+    status: "paused",
+    creator: "alex",
+    platforms: [],
+    breakBefore: true,
+    href: "/l1-qa",
   },
   {
     id: "crosspost-written",

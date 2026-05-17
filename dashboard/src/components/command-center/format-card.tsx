@@ -29,9 +29,15 @@ import type { Format } from "@/lib/command-center-config";
 interface FormatCardProps {
   format: Format;
   color: string;
+  // Optional inline style merged onto the card root. Today CategorySection
+  // uses this to apply `gridColumnStart: 1` for formats flagged
+  // `breakBefore`, which forces them onto a new row in the grid. Kept
+  // generic (a CSSProperties pass-through) so future callers can layer
+  // grid-position tweaks without growing the prop surface for each one.
+  style?: React.CSSProperties;
 }
 
-export function FormatCard({ format, color }: FormatCardProps) {
+export function FormatCard({ format, color, style }: FormatCardProps) {
   const isLive = format.status === "live";
   const router = useRouter();
 
@@ -86,6 +92,11 @@ export function FormatCard({ format, color }: FormatCardProps) {
       style={{
         backgroundColor: "#161513",
         border: "0.5px solid rgba(255,255,255,0.06)",
+        // Caller-supplied overrides go last so grid-position tweaks (e.g.
+        // `gridColumnStart` from a breakBefore format) can override the
+        // defaults above. The defaults are purely visual, so they're safe
+        // to clobber if a caller really wants to.
+        ...style,
       }}
     >
       {/* Pulse bar — flush to top edge, full width. The animated variant
@@ -125,22 +136,27 @@ export function FormatCard({ format, color }: FormatCardProps) {
         {/* Flex spacer — pushes chip row to bottom */}
         <div className="flex-1" />
 
-        {/* Platform section */}
-        <div>
-          <div className="mb-2 text-[10px] font-medium uppercase tracking-[0.18em] text-white/40">
-            Publishes to
+        {/* Platform section — hidden entirely when a format has no
+            destinations yet (placeholder cards like L1 Q&A). Rendering
+            the "PUBLISHES TO" eyebrow above an empty chip row reads as
+            broken rather than aspirational, so we just drop the block. */}
+        {format.platforms.length > 0 && (
+          <div>
+            <div className="mb-2 text-[10px] font-medium uppercase tracking-[0.18em] text-white/40">
+              Publishes to
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {format.platforms.map((p) => (
+                <PlatformChip
+                  key={p.id}
+                  platformId={p.id}
+                  platformName={p.name}
+                  color={color}
+                />
+              ))}
+            </div>
           </div>
-          <div className="flex flex-wrap gap-1.5">
-            {format.platforms.map((p) => (
-              <PlatformChip
-                key={p.id}
-                platformId={p.id}
-                platformName={p.name}
-                color={color}
-              />
-            ))}
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Hover state for the surface — implemented as an absolute overlay
