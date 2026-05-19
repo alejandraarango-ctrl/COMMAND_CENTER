@@ -244,16 +244,19 @@ services:
   # Runs 5 min after the generator above so it picks up the schedule row
   # just inserted (scheduled_for is generator-now + 4 min, so the row is
   # "due" by the time this fires). buildCommand additionally runs
-  # `playwright install --with-deps chromium` to provision the browser
-  # binary — adds ~2 min to the build but matches Playwright's standard
-  # deploy pattern.
+  # `playwright install chromium` to provision the browser binary. We
+  # deliberately omit --with-deps — Render's build env disallows the
+  # sudo apt-get it triggers, and the Ubuntu-based Python runtime
+  # already ships the shared libs headless Chromium needs. If the
+  # publisher later crashes at runtime with a missing .so, escalate to
+  # a Docker runtime + official Playwright image.
   - type: cron
     name: snapchat-pipeline
     runtime: python
     buildCommand: |
       pip install -r requirements.txt &&
       pip install -e . &&
-      playwright install --with-deps chromium
+      playwright install chromium
     startCommand: python -m cron.snapchat_pipeline
     schedule: "5 * * * *"  # hourly at :05 UTC
     envVars:
