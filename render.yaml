@@ -243,20 +243,28 @@ services:
   # ── Snapchat publisher (headless Chromium via Playwright) ────────────
   # Runs 5 min after the generator above so it picks up the schedule row
   # just inserted (scheduled_for is generator-now + 4 min, so the row is
-  # "due" by the time this fires). buildCommand additionally runs
-  # `playwright install chromium` to provision the browser binary. We
-  # deliberately omit --with-deps — Render's build env disallows the
-  # sudo apt-get it triggers, and the Ubuntu-based Python runtime
-  # already ships the shared libs headless Chromium needs. If the
-  # publisher later crashes at runtime with a missing .so, escalate to
-  # a Docker runtime + official Playwright image.
+  # "due" by the time this fires).
+  #
+  # buildCommand installs `chromium-headless-shell` (not `chromium`):
+  # recent Playwright versions split the headless shell out as its own
+  # artifact, and `chromium.launch(headless=True)` resolves to the shell
+  # at runtime. Installing only `chromium` produces a "Executable doesn't
+  # exist at .../chromium_headless_shell-NNNN/..." error. Both snapchat
+  # launch sites (platforms/snapchat.py) use headless=True, so the shell
+  # is sufficient and ~1/3 the download size of full chromium.
+  #
+  # We deliberately omit --with-deps — Render's build env disallows the
+  # sudo apt-get it triggers, and the Ubuntu-based Python runtime already
+  # ships the shared libs headless Chromium needs. If the publisher later
+  # crashes at runtime with a missing .so, escalate to a Docker runtime
+  # + official Playwright image.
   - type: cron
     name: snapchat-pipeline
     runtime: python
     buildCommand: |
       pip install -r requirements.txt &&
       pip install -e . &&
-      playwright install chromium
+      playwright install chromium-headless-shell
     startCommand: python -m cron.snapchat_pipeline
     schedule: "5 * * * *"  # hourly at :05 UTC
     envVars:
