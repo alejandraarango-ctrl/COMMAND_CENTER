@@ -99,7 +99,7 @@ services:
   #       sync: false
 
   - type: cron
-    name: tiktok-pipeline
+    name: tweet-reel-recent
     runtime: python
     buildCommand: pip install -r requirements.txt && pip install -e .
     startCommand: python -m cron.tiktok_pipeline
@@ -130,7 +130,7 @@ services:
         sync: false
 
   - type: cron
-    name: tiktok-bank-pipeline
+    name: tweet-reel-bank
     runtime: python
     buildCommand: pip install -r requirements.txt && pip install -e .
     startCommand: python -m cron.tiktok_bank_pipeline
@@ -162,7 +162,7 @@ services:
   # storage_cleanup_status='pending'; mirrors Buffer's sentAt into
   # posts.published_at, then deletes the mp4 3 days later.
   - type: cron
-    name: tiktok-storage-cleanup
+    name: manual-upload-storage-cleanup
     runtime: python
     buildCommand: pip install -r requirements.txt && pip install -e .
     startCommand: python -m cron.tiktok_storage_cleanup
@@ -178,7 +178,7 @@ services:
         sync: false
 
   - type: cron
-    name: threads-cron
+    name: written-posts
     runtime: python
     buildCommand: pip install -r requirements.txt && pip install -e .
     startCommand: python -m cron.threads_cron
@@ -204,7 +204,7 @@ services:
         sync: false
 
   - type: cron
-    name: threads-leila-cron
+    name: leila-threads
     runtime: python
     buildCommand: pip install -r requirements.txt && pip install -e .
     startCommand: python -m cron.threads_leila_cron
@@ -265,7 +265,7 @@ services:
         sync: false
 
   - type: cron
-    name: linkedin-leila-cron
+    name: leila-linkedin
     runtime: python
     buildCommand: pip install -r requirements.txt && pip install -e .
     startCommand: python -m cron.linkedin_leila_cron
