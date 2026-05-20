@@ -169,11 +169,13 @@ export async function sendToBuffer(
   const { facebookPostType, instagramPostType, youtube, captionLimit } = options;
 
   // Build assets payload based on media type.
-  // Buffer's AssetsInput accepts: images, videos, documents, link
+  // Buffer's assets input is a list of single-field items, one per media file
+  // (e.g. `[{ image: { url: … } }]`). Migrated from the legacy object shape
+  // ({ images: [...] }) per Buffer's 2026-05-25 API change.
   const assets =
     mediaType === "image"
-      ? { images: [{ url: mediaUrl }] }
-      : { videos: [{ url: mediaUrl }] };
+      ? [{ image: { url: mediaUrl } }]
+      : [{ video: { url: mediaUrl } }];
 
   const input: Record<string, unknown> = {
     channelId,

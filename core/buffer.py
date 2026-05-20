@@ -176,11 +176,13 @@ def send_to_buffer(
     # Build the assets payload based on media type.
     # For videos: Buffer downloads from our signed URL and re-uploads to the platform.
     # For images: same flow, but Buffer uses the image upload path.
-    # Buffer's AssetsInput accepts: images, videos, documents, link
+    # Buffer's assets input is a list of single-field items, one per media file
+    # (e.g. `[{"image": {"url": …}}]`). Migrated from the legacy object shape
+    # ({"images": [...]}) per Buffer's 2026-05-25 API change.
     if media_type == "image":
-        assets = {"images": [{"url": media_url}]}
+        assets = [{"image": {"url": media_url}}]
     else:
-        assets = {"videos": [{"url": media_url}]}
+        assets = [{"video": {"url": media_url}}]
 
     data = _buffer_request(
         """
