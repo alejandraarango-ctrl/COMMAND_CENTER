@@ -86,6 +86,14 @@ SELECTOR_UPLOAD_READY = '[data-testid="app.profileMgr.snapPoster.postSnap"]:not(
 # dashboard/src/app/api/snapchat-pipeline/route.ts.
 SELECTOR_CAPTION = 'textarea[placeholder*="description"]'
 
+# Headline input — the 40-char text overlaid on the video's thumbnail in
+# the Spotlight feed. High-visibility surface and the user-facing "title"
+# of the post. Placeholder string matches the live DOM ("Displayed over
+# your thumbnail"); same substring-match pattern as SELECTOR_CAPTION so a
+# minor Snap copy change won't immediately break us, but a structural
+# redesign of the composer will (and should — we'd rather fail fast).
+SELECTOR_HEADLINE = 'input[placeholder*="Displayed over your thumbnail"]'
+
 # The Post / Publish button. Click triggers the actual server-side publish.
 # Same testid as SELECTOR_UPLOAD_READY but without the :not([disabled])
 # qualifier — we use the enabled-state probe to know when to click, and the
@@ -132,6 +140,16 @@ VIEWPORT = {"width": 1440, "height": 900}
 # 30ms per keystroke for the caption — fast enough to finish a long caption
 # inside the publish timeout, slow enough to clear Snap's anti-bot floor.
 CAPTION_TYPE_DELAY_MS = 30
+
+# Fixed text typed into the Snapchat composer's Headline field on every
+# post. Overlays on the thumbnail in the Spotlight feed. Snap caps the
+# field at 40 chars; "Agree?" is 6, well within the limit. Why hardcoded
+# rather than read from a post column: the bank is opinionated tweet
+# content by nature, so a single "Agree?" CTA works as a universal hook.
+# If we ever want per-post headlines (author handle, computed hashtag,
+# etc.), promote this to a post.metadata field — see the deferred-work
+# comment at the bottom of this file.
+SNAPCHAT_HEADLINE_TEXT = "Agree?"
 
 # The "media" bucket in Supabase Storage. Matches the IG / TikTok pipelines.
 MEDIA_BUCKET = "media"
@@ -317,10 +335,21 @@ class Snapchat(PlatformBase):
                     # signal in step 5.
                     page.check(SELECTOR_SPOTLIGHT_CHECKBOX)
 
-                    # Step 5: upload + caption + click.
+                    # Step 5: upload + headline + caption + click.
                     page.locator(SELECTOR_FILE_INPUT).set_input_files(local_path)
                     page.wait_for_selector(
                         SELECTOR_UPLOAD_READY, timeout=120_000
+                    )
+                    # Headline (thumbnail overlay). Always-on — no per-post
+                    # override today. If the selector misses (Snap redesign,
+                    # locale-specific placeholder change, etc.) we want the
+                    # publish to fail rather than silently post without the
+                    # CTA, so no try/except — mirror the caption step's
+                    # fail-fast behavior. Same 30ms cadence as the caption to
+                    # stay under Snap's anti-bot floor; 6 chars finishes in
+                    # ~200ms either way.
+                    page.locator(SELECTOR_HEADLINE).type(
+                        SNAPCHAT_HEADLINE_TEXT, delay=CAPTION_TYPE_DELAY_MS
                     )
                     if caption:
                         page.locator(SELECTOR_CAPTION).type(
@@ -568,10 +597,12 @@ class Snapchat(PlatformBase):
 #    headless-browser session per day instead of 24, fewer auth-expiry
 #    failure windows, and we'd lean on Snap's clock instead of Render's.
 #
-# 2. Headline / thumbnail overlay — the composer exposes a "Headline" input
-#    (40-char, placeholder "Displayed over your thumbnail") that overlays
-#    text on the video's preview. v1 leaves it blank. v2 could populate it
-#    from the tweet author handle or a leading hashtag for stronger CTR.
+# 2. Per-post Headline — v1.1 now hardcodes "Agree?" as a universal CTA
+#    (see SNAPCHAT_HEADLINE_TEXT and the headline step in create_post).
+#    The 40-char composer field overlays on the thumbnail. v2 could read
+#    from post.metadata so each tweet's headline reflects its content
+#    (e.g. author handle, a leading hashtag, a Sonnet-generated hook)
+#    for stronger CTR — currently every post gets the same overlay.
 #
 # 3. Multi-destination publish — three checkboxes exist: `#spotlight`,
 #    `#publicStory`, `#publicProfile`. v1 only ticks Spotlight. v2 could
