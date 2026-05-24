@@ -322,3 +322,8 @@ services:
         sync: false
       - key: APIFY_LEILA_TWITTER_HANDLE  # optional — defaults to LeilaHormozi
         sync: false
+      # Read by core.tweet_filter (LLM judge for borderline tweet quality).
+      # Missing -> filter raises -> every tweet gets skipped (see warnings
+      # in env_diag). Set the value in the Render dashboard for this service.
+      - key: ANTHROPIC_API_KEY
+        sync: false
