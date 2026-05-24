@@ -228,17 +228,22 @@ services:
   # (matching every other cron in this file) instead of introducing a
   # runtime: image curl service — a 3-line requests.post is cheaper to
   # maintain than adding a new runtime to the repo.
-  - type: cron
-    name: snapchat-content-pipeline
-    runtime: python
-    buildCommand: pip install -r requirements.txt && pip install -e .
-    startCommand: python -m cron.snapchat_trigger
-    schedule: "0 * * * *"  # hourly at :00 UTC
-    envVars:
-      - key: CRON_SECRET
-        sync: false
-      - key: DASHBOARD_URL
-        sync: false
+  #
+  # TEMPORARILY DEACTIVATED (2026-05-24): paused alongside the Playwright
+  # publisher below — generating content with no publisher would just pile
+  # up stale pending schedules. Suspend on Render too. Uncomment + redeploy
+  # to re-enable.
+  # - type: cron
+  #   name: snapchat-content-pipeline
+  #   runtime: python
+  #   buildCommand: pip install -r requirements.txt && pip install -e .
+  #   startCommand: python -m cron.snapchat_trigger
+  #   schedule: "0 * * * *"  # hourly at :00 UTC
+  #   envVars:
+  #     - key: CRON_SECRET
+  #       sync: false
+  #     - key: DASHBOARD_URL
+  #       sync: false
 
   # ── Snapchat publisher (headless Chromium via Playwright) ────────────
   # Runs 5 min after the generator above so it picks up the schedule row
@@ -266,27 +271,31 @@ services:
   # ships the shared libs headless Chromium needs. If the publisher later
   # crashes at runtime with a missing .so, escalate to a Docker runtime
   # + official Playwright image.
-  - type: cron
-    name: snapchat-pipeline
-    runtime: python
-    buildCommand: |
-      pip install -r requirements.txt &&
-      pip install -e . &&
-      PLAYWRIGHT_BROWSERS_PATH=/opt/render/project/src/.playwright-browsers playwright install chromium-headless-shell
-    startCommand: python -m cron.snapchat_pipeline
-    schedule: "5 * * * *"  # hourly at :05 UTC
-    envVars:
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_SERVICE_KEY
-        sync: false
-      - key: SNAPCHAT_PROFILE_URL
-        sync: false
-      # Must match the path passed inline in buildCommand. Render cron
-      # services only persist /opt/render/project/src/ across the build
-      # → runtime boundary, so the browser cache has to live in there.
-      - key: PLAYWRIGHT_BROWSERS_PATH
-        value: /opt/render/project/src/.playwright-browsers
+  #
+  # TEMPORARILY DEACTIVATED (2026-05-24): Playwright Snapchat automation
+  # paused at user request. Suspend on Render too so the existing service
+  # stops firing. Uncomment + redeploy to re-enable.
+  # - type: cron
+  #   name: snapchat-pipeline
+  #   runtime: python
+  #   buildCommand: |
+  #     pip install -r requirements.txt &&
+  #     pip install -e . &&
+  #     PLAYWRIGHT_BROWSERS_PATH=/opt/render/project/src/.playwright-browsers playwright install chromium-headless-shell
+  #   startCommand: python -m cron.snapchat_pipeline
+  #   schedule: "5 * * * *"  # hourly at :05 UTC
+  #   envVars:
+  #     - key: SUPABASE_URL
+  #       sync: false
+  #     - key: SUPABASE_SERVICE_KEY
+  #       sync: false
+  #     - key: SNAPCHAT_PROFILE_URL
+  #       sync: false
+  #     # Must match the path passed inline in buildCommand. Render cron
+  #     # services only persist /opt/render/project/src/ across the build
+  #     # → runtime boundary, so the browser cache has to live in there.
+  #     - key: PLAYWRIGHT_BROWSERS_PATH
+  #       value: /opt/render/project/src/.playwright-browsers
 
   - type: cron
     name: leila-linkedin
