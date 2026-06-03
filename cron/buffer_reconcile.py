@@ -56,6 +56,12 @@ logger = logging.getLogger(__name__)
 MAX_RESEND_ATTEMPTS = 3
 # Pace re-sends so a batch of retries doesn't trip Buffer's rate limit.
 INTER_RESEND_SLEEP_SECONDS = 2.0
+# Pace the per-post state reads. Each post is one Buffer GraphQL call, and a
+# backlog can be hundreds of posts; firing them back-to-back trips Buffer's rate
+# limit (HTTP 429), which then returns a Retry-After larger than our retry cap so
+# the whole batch fails at once. A small delay between reads keeps us under the
+# limit — a few minutes for a one-time backlog drain is fine on a 3-hourly cron.
+INTER_READ_SLEEP_SECONDS = 1.0
 # Fresh signed-URL lifetime for a re-send: 30 days, matching the send paths so
 # the re-queued post survives another long stint in Buffer's queue.
 RESEND_SIGNED_URL_EXPIRES_IN = 2592000
@@ -247,7 +253,11 @@ def main() -> None:
                     post_id, buffer_id, e, exc_info=True,
                 )
                 errors += 1
-                continue
+
+            # Pace every post — including ones that errored — so a large backlog
+            # (or a transient rate limit we're recovering from) doesn't burst
+            # requests at Buffer. Runs after the try/except so it always applies.
+            time.sleep(INTER_READ_SLEEP_SECONDS)
 
         logger.info(
             "Reconcile: %d published, %d re-sent, %d terminal-failed, "
