@@ -33,7 +33,7 @@ import logging
 import sys
 import time
 
-from core.buffer import get_buffer_post_state, send_to_buffer
+from core.buffer import BufferRateLimitError, get_buffer_post_state, send_to_buffer
 from core.database import (
     get_posts_awaiting_buffer_confirmation,
     log_cron_finish,
@@ -56,12 +56,16 @@ logger = logging.getLogger(__name__)
 MAX_RESEND_ATTEMPTS = 3
 # Pace re-sends so a batch of retries doesn't trip Buffer's rate limit.
 INTER_RESEND_SLEEP_SECONDS = 2.0
-# Pace the per-post state reads. Each post is one Buffer GraphQL call, and a
-# backlog can be hundreds of posts; firing them back-to-back trips Buffer's rate
-# limit (HTTP 429), which then returns a Retry-After larger than our retry cap so
-# the whole batch fails at once. A small delay between reads keeps us under the
-# limit — a few minutes for a one-time backlog drain is fine on a 3-hourly cron.
+# Pace the per-post state reads so we don't burst requests at Buffer.
 INTER_READ_SLEEP_SECONDS = 1.0
+# Max posts to reconcile per run. Each post is one Buffer API call and Buffer's
+# limit is a rolling ~100-request/15-minute window THAT WE SHARE with the send
+# paths (publishers, fan-out legs). Polling the whole backlog (hundreds of rows)
+# in one run blows that window and every request comes back 429. So we process a
+# bounded slice — oldest first — and let a backlog drain across runs. 40 leaves
+# headroom under ~100 for the other Buffer crons. At a 3-hourly cadence that's
+# 320 posts/day of drain capacity, far above steady-state volume.
+RECONCILE_BATCH_LIMIT = 40
 # Fresh signed-URL lifetime for a re-send: 30 days, matching the send paths so
 # the re-queued post survives another long stint in Buffer's queue.
 RESEND_SIGNED_URL_EXPIRES_IN = 2592000
@@ -151,8 +155,11 @@ def main() -> None:
     run_id = log_cron_start(platform="buffer", job_type="reconcile")
 
     try:
-        posts = get_posts_awaiting_buffer_confirmation()
-        logger.info("Found %d post(s) awaiting Buffer confirmation", len(posts))
+        posts = get_posts_awaiting_buffer_confirmation(limit=RECONCILE_BATCH_LIMIT)
+        logger.info(
+            "Reconciling %d post(s) this run (cap %d) awaiting Buffer confirmation",
+            len(posts), RECONCILE_BATCH_LIMIT,
+        )
 
         published = 0
         resent = 0
@@ -160,6 +167,7 @@ def main() -> None:
         resend_failed = 0  # a re-send attempt itself errored (will retry next run)
         still_queued = 0
         errors = 0
+        rate_limited = False  # set if we bail early on a Buffer rate limit
 
         for post in posts:
             post_id = post["id"]
@@ -245,6 +253,21 @@ def main() -> None:
                     # Still in Buffer's queue (e.g. status 'buffer'/'pending').
                     still_queued += 1
 
+            except BufferRateLimitError as e:
+                # Buffer is throttling us (rolling ~100-req/15-min window). Every
+                # remaining post would 429 too, so stop the run NOW instead of
+                # grinding through the rest and deepening the penalty. The
+                # unprocessed posts stay 'sent_to_buffer' and the next scheduled
+                # run (3h later, window long reset) picks them up. Not counted as
+                # an error — throttling is expected, not a failure.
+                logger.warning(
+                    "Buffer rate limited at post %s — stopping run, %d post(s) "
+                    "deferred to next run: %s",
+                    post_id, len(posts) - (published + resent + failed + still_queued), e,
+                )
+                rate_limited = True
+                break
+
             except Exception as e:
                 # Per-post isolation: one bad post must not abort the run.
                 # Next run retries it cleanly.
@@ -254,15 +277,15 @@ def main() -> None:
                 )
                 errors += 1
 
-            # Pace every post — including ones that errored — so a large backlog
-            # (or a transient rate limit we're recovering from) doesn't burst
-            # requests at Buffer. Runs after the try/except so it always applies.
+            # Pace every post so we don't burst requests at Buffer. Runs after
+            # the try/except so it always applies.
             time.sleep(INTER_READ_SLEEP_SECONDS)
 
         logger.info(
             "Reconcile: %d published, %d re-sent, %d terminal-failed, "
-            "%d re-send errors, %d still queued, %d errors",
+            "%d re-send errors, %d still queued, %d errors%s",
             published, resent, failed, resend_failed, still_queued, errors,
+            " (stopped early: Buffer rate limit)" if rate_limited else "",
         )
 
         # Only an unexpected per-post exception fails the run. Re-send attempts

@@ -34,7 +34,11 @@ def _patch_common(monkeypatch, posts, states):
         reconcile, "log_cron_finish",
         lambda run_id, **k: finished.update(k),
     )
-    monkeypatch.setattr(reconcile, "get_posts_awaiting_buffer_confirmation", lambda: posts)
+    # Accept **kwargs so the stub tolerates the production call passing
+    # limit=RECONCILE_BATCH_LIMIT.
+    monkeypatch.setattr(
+        reconcile, "get_posts_awaiting_buffer_confirmation", lambda **k: posts
+    )
     monkeypatch.setattr(reconcile, "get_buffer_post_state", lambda bid: states.get(bid))
     # Don't actually sleep between re-sends in tests.
     monkeypatch.setattr(reconcile.time, "sleep", lambda s: None)
@@ -107,6 +111,39 @@ def test_main_isolates_per_post_errors(monkeypatch):
 
     assert calls == ["a", "b"]  # b was still attempted after a failed
     assert finished["status"] == "failed"  # one error → run marked failed
+
+
+def test_main_stops_early_on_rate_limit(monkeypatch):
+    # Three posts; the SECOND read trips Buffer's rate limit. The run must stop
+    # immediately (not poll the third), leave the unprocessed rows untouched,
+    # and finish 'success' since throttling is expected, not a failure.
+    posts = [
+        {"id": "a", "platform": "linkedin", "platform_post_id": "ba"},
+        {"id": "b", "platform": "facebook", "platform_post_id": "bb"},
+        {"id": "c", "platform": "instagram", "platform_post_id": "bc"},
+    ]
+    sent_at = datetime(2026, 5, 30, 18, 0, tzinfo=timezone.utc)
+    finished, updates = _patch_common(monkeypatch, posts, {})
+
+    reads: list[str] = []
+
+    def read_state(bid):
+        reads.append(bid)
+        if bid == "bb":
+            raise reconcile.BufferRateLimitError("Buffer rate limited (HTTP 429)")
+        return {"status": "sent", "sentAt": sent_at}
+
+    monkeypatch.setattr(reconcile, "get_buffer_post_state", read_state)
+
+    reconcile.main()
+
+    # Stopped at "b" — "c" was never read.
+    assert reads == ["ba", "bb"]
+    by_id = dict(updates)
+    assert by_id["a"]["status"] == "published"  # "a" resolved before the limit
+    assert "c" not in by_id                       # "c" deferred to next run
+    # Rate limit is not an error: run still succeeds.
+    assert finished["status"] == "success"
 
 
 def test_can_resend():

@@ -152,7 +152,7 @@ def get_posts(
 
 
 def get_posts_awaiting_buffer_confirmation(
-    max_age_days: int = 30, min_age_minutes: int = 5
+    max_age_days: int = 30, min_age_minutes: int = 5, limit: int | None = None
 ) -> list[dict]:
     """Fetch posts we handed to Buffer's queue but haven't confirmed published.
 
@@ -169,23 +169,31 @@ def get_posts_awaiting_buffer_confirmation(
       - `max_age_days`: stop polling posts old enough that Buffer would have
         published or permanently failed them long ago — avoids scanning stale
         rows forever. Matches the 30-day signed-URL TTL window.
+      - `limit`: cap how many rows a single run pulls. Each post is one Buffer
+        API call and Buffer's limit is a rolling ~100-req/15-min window, so the
+        reconcile cron processes a bounded slice per run (oldest first) and lets
+        a backlog drain across runs instead of blowing the window. None = all.
     """
     client = get_client()
     now = datetime.now(timezone.utc)
     newest = (now - timedelta(minutes=min_age_minutes)).isoformat()
     oldest = (now - timedelta(days=max_age_days)).isoformat()
 
-    return (
+    query = (
         client.table("posts")
         .select("*")
         .eq("status", "sent_to_buffer")
         .not_.is_("platform_post_id", "null")
         .lte("created_at", newest)
         .gte("created_at", oldest)
+        # Oldest first: the longest-unconfirmed handoffs are the most likely to
+        # have already resolved on Buffer's side, so drain them first.
         .order("created_at", desc=False)
-        .execute()
-        .data
     )
+    if limit is not None:
+        query = query.limit(limit)
+
+    return query.execute().data
 
 
 # ── Schedules ────────────────────────────────────────────────────────────

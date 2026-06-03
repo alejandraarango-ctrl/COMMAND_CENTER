@@ -25,6 +25,18 @@ logger = logging.getLogger(__name__)
 
 BUFFER_GRAPHQL_URL = "https://api.buffer.com/graphql"
 
+
+class BufferRateLimitError(RuntimeError):
+    """Buffer rejected a request because we exceeded its rate limit.
+
+    A distinct type (not a bare RuntimeError) so batch callers — the reconcile
+    cron especially — can tell "Buffer is throttling us" apart from "this one
+    post is broken." Buffer's limit is a rolling ~100-request/15-minute window:
+    once it trips, every remaining request in the run will also be rejected
+    until the window resets, so the right reaction is to stop the batch and let
+    the next scheduled run retry — not to keep hammering.
+    """
+
 # TikTok has a 150-character caption limit. We truncate with an ellipsis (…)
 # to signal the text was cut, matching the TS version's behavior.
 TIKTOK_CAPTION_LIMIT = 150
@@ -117,7 +129,7 @@ def _buffer_request(query: str, variables: dict | None = None) -> dict:
                 )
                 time.sleep(wait)
                 continue
-            raise RuntimeError(
+            raise BufferRateLimitError(
                 f"Buffer rate limited (HTTP 429) after {attempt} attempt(s)"
             )
 
@@ -142,6 +154,11 @@ def _buffer_request(query: str, variables: dict | None = None) -> dict:
                 time.sleep(wait)
                 continue
             messages = ", ".join(e.get("message", "") for e in errors)
+            if limited:
+                # Exhausted retries (or the wait hint exceeded our cap) on a
+                # GraphQL-level rate limit — same "Buffer is throttling us"
+                # signal as the HTTP 429 above, so raise the same type.
+                raise BufferRateLimitError(f"Buffer rate limited: {messages}")
             raise RuntimeError(f"Buffer GraphQL error: {messages}")
 
         return body.get("data", {})
