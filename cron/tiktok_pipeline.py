@@ -63,13 +63,12 @@ from core.database import (
     update_post,
 )
 from core.env_diag import log_env_diagnostics
-from core.media import get_signed_url
+from core.media import build_proxy_url
 from core.models import Post
 from core.text_utils import normalize_tweet_text
 from core.content_sources import fetch_apify_tweets
 from cron._tweet_card_legs import (
     BUFFER_CAPTION,
-    SIGNED_URL_EXPIRES_IN,
     _is_unique_violation,
     fanout_extra_legs_for_one_tweet,
     render_extra_platforms,
@@ -278,7 +277,7 @@ def main():
             continue
 
         try:
-            video_url = get_signed_url(storage_path, expires_in=SIGNED_URL_EXPIRES_IN)
+            video_url = build_proxy_url(post_id)
             buffer_post_id = send_to_buffer(
                 tiktok_channel_id, BUFFER_CAPTION, video_url, media_type="video",
             )

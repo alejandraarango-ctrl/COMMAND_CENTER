@@ -47,7 +47,7 @@ from core.database import (
     update_post,
 )
 from core.env_diag import log_env_diagnostics
-from core.media import get_signed_url
+from core.media import build_proxy_url
 from core.models import Post
 from core.tweet_filter import is_postable_tweet
 
@@ -325,12 +325,7 @@ def main() -> None:
             continue
 
         try:
-            # 30-day signed URL — Buffer downloads the asset lazily from its
-            # queue, and a post can sit there 1-2 weeks before its slot. A
-            # 7-day expiry (the old value) meant backed-up posts had a dead
-            # URL by the time Buffer fetched them, surfacing as Buffer's
-            # generic "unknown error". 30 days clears the queue with margin.
-            image_url = get_signed_url(storage_path, expires_in=2592000)
+            image_url = build_proxy_url(post_id)
 
             buffer_post_id = send_to_buffer(
                 LINKEDIN_LEILA_CHANNEL_ID,

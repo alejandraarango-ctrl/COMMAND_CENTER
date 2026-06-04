@@ -132,6 +132,20 @@ def upload_to_storage(local_path: str, storage_path: str) -> str:
     return storage_path
 
 
+def build_proxy_url(post_id: str) -> str:
+    """Return the permanent media proxy URL for a post.
+
+    Unlike signed Supabase URLs (which expire in days), this URL never expires
+    — it points to our own /api/media/<post_id> endpoint that re-signs on
+    every request. When Buffer fetches this URL at publish time, the endpoint
+    looks up the post's storage path, generates a fresh 1-hour signed URL, and
+    issues a 302 redirect. Buffer follows the redirect and always gets a live
+    download link, regardless of how long the post has sat in its queue.
+    """
+    base = os.environ["DASHBOARD_URL"].rstrip("/")
+    return f"{base}/api/media/{post_id}"
+
+
 def get_signed_url(storage_path: str, expires_in: int = 3600) -> str:
     """Get a signed URL for a file in Supabase Storage.
 

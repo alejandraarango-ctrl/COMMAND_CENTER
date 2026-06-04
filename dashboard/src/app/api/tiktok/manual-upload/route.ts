@@ -6,7 +6,7 @@
  * token issued by /api/tiktok/manual-upload/sign-url. This endpoint just:
  *   1. Verifies the storagePath belongs to the calling user.
  *   2. Confirms the upload actually completed (the object exists).
- *   3. Signs a 30-day read URL for Buffer to pull from.
+ *   3. Generates permanent proxy URLs for each platform (never expire).
  *   4. Queues the video on Buffer for TikTok, then fans it out to YouTube
  *      Shorts and (if enabled) LinkedIn.
  *   5. Writes one `posts` row per successful platform, all referencing the
@@ -65,11 +65,6 @@ const PG_UNIQUE_VIOLATION = "23505";
 
 const BUCKET = "media";
 
-// 30 days. Buffer downloads the file lazily from its queue and a post can sit
-// there 1-2 weeks before its slot, so a 7-day expiry risked the URL dying
-// before Buffer fetched the video (surfacing as Buffer's "unknown error").
-const READ_URL_TTL_SECONDS = 60 * 60 * 24 * 30;
-
 // Defaults applied to every YouTube Shorts upload. Pulled out so they're
 // easy to scan and tweak. `title` is supplied per-upload from the form.
 const YOUTUBE_DEFAULTS: Omit<YouTubeMetadata, "title"> = {
@@ -80,6 +75,15 @@ const YOUTUBE_DEFAULTS: Omit<YouTubeMetadata, "title"> = {
   embeddable: true,
   license: "youtube",
 };
+
+// Build a permanent proxy URL for a post's media. Unlike signed Supabase
+// URLs (which expire in days), this URL never expires — /api/media/[id]
+// re-signs the storage path on every request so Buffer can always fetch
+// the file regardless of how long the post has sat in its queue.
+function buildProxyUrl(postId: string): string {
+  const base = (process.env.DASHBOARD_URL ?? "").replace(/\/$/, "");
+  return `${base}/api/media/${postId}`;
+}
 
 function isUniqueViolation(err: unknown): boolean {
   const e = err as { code?: string; message?: string } | null;
@@ -156,9 +160,9 @@ export async function POST(req: NextRequest) {
 
   // Confirm the upload actually finished. If the user submitted the
   // finalize form before TUS completed (or the browser tab died mid-
-  // upload), the object won't be there and we'd silently sign a URL
-  // to nothing. Cheaper than re-issuing a HEAD request — list() scopes
-  // the query to this user's directory.
+  // upload), the object won't be there and we'd silently pass a dead
+  // URL to Buffer. Cheaper than re-issuing a HEAD request — list()
+  // scopes the query to this user's directory.
   const basename = storagePath.slice(expectedPrefix.length);
   const { data: listed, error: listError } = await supabase.storage
     .from(BUCKET)
@@ -181,17 +185,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Sign a 30-day read URL for Buffer.
-  const { data: signed, error: signError } = await supabase.storage
-    .from(BUCKET)
-    .createSignedUrl(storagePath, READ_URL_TTL_SECONDS);
-  if (signError || !signed?.signedUrl) {
-    console.error("manual-upload: createSignedUrl failed:", signError?.message);
-    return NextResponse.json(
-      { error: `Failed to sign URL: ${signError?.message}` },
-      { status: 500 },
-    );
-  }
+  // Generate post IDs upfront — one per platform — so we can build proxy
+  // URLs BEFORE calling Buffer. The proxy URL (/api/media/<id>) never
+  // expires, whereas the old approach (30-day signed Supabase URL) would
+  // fail if the post sat in Buffer's queue past the TTL. We insert the
+  // posts rows with these explicit IDs after Buffer accepts each leg.
+  const tiktokPostId = crypto.randomUUID();
+  const youtubePostId = crypto.randomUUID();
+  const xPostId = crypto.randomUUID();
+  const linkedinPostId = crypto.randomUUID();
 
   // Queue the video on Buffer's TikTok channel. sendToBuffer truncates the
   // caption to TikTok's 150-char limit on its own.
@@ -202,15 +204,14 @@ export async function POST(req: NextRequest) {
     tiktokBufferId = await sendToBuffer(
       tiktokChannelId,
       caption,
-      signed.signedUrl,
+      buildProxyUrl(tiktokPostId),
       "video",
     );
   } catch (err) {
     console.error("Buffer TikTok send failed:", (err as Error).message);
-    // Nothing to roll back — we haven't written a posts row and the
-    // file already lives in Storage (uploaded by the browser, not by
-    // us). The cleanup cron won't pick it up because no posts row
-    // references it, so we'd leak the bytes. Surface a clear error so
+    // Nothing to roll back — the file already lives in Storage (uploaded
+    // by the browser). The cleanup cron won't pick it up because no posts
+    // row references it, so we'd leak the bytes. Surface a clear error so
     // a future TTL job can sweep unclaimed manual/<userId>/* objects.
     return NextResponse.json(
       { error: `Buffer send failed: ${(err as Error).message}` },
@@ -219,10 +220,11 @@ export async function POST(req: NextRequest) {
   }
 
   // Record the TikTok post. platform_post_id holds the Buffer ID so the
-  // cleanup cron can query Buffer for sentAt later.
-  const { data: tiktokPost, error: tiktokInsertError } = await supabase
+  // cleanup cron and buffer_reconcile can query Buffer for sentAt later.
+  const { error: tiktokInsertError } = await supabase
     .from("posts")
     .insert({
+      id: tiktokPostId,
       platform: "tiktok",
       status: "sent_to_buffer",
       title,
@@ -235,9 +237,7 @@ export async function POST(req: NextRequest) {
         buffer_post_id: tiktokBufferId,
         storage_cleanup_status: "pending",
       },
-    })
-    .select("id")
-    .single();
+    });
 
   // Track the TikTok insert outcome but DON'T bail on a unique-violation.
   // Buffer has already accepted the TikTok post (we have tiktokBufferId),
@@ -253,8 +253,7 @@ export async function POST(req: NextRequest) {
   // "uploaded" state. Non-dedup DB errors still bail with 500: those
   // indicate something more serious (schema drift, connection failure)
   // and shouldn't be silently masked.
-  const tiktokPostId: string | undefined = tiktokPost?.id;
-  if (tiktokInsertError || !tiktokPost) {
+  if (tiktokInsertError) {
     if (isUniqueViolation(tiktokInsertError)) {
       console.warn(
         "TikTok post insert deduplicated (Buffer id=%s) — continuing fan-out",
@@ -264,11 +263,11 @@ export async function POST(req: NextRequest) {
       console.error(
         "TikTok post insert failed (Buffer id=%s): %s",
         tiktokBufferId,
-        tiktokInsertError?.message,
+        tiktokInsertError.message,
       );
       return NextResponse.json(
         {
-          error: `Post insert failed: ${tiktokInsertError?.message}`,
+          error: `Post insert failed: ${tiktokInsertError.message}`,
           tiktokBufferId,
         },
         { status: 500 },
@@ -286,7 +285,7 @@ export async function POST(req: NextRequest) {
     youtubeBufferId = await sendToBuffer(
       ytChannelId,
       caption,
-      signed.signedUrl,
+      buildProxyUrl(youtubePostId),
       "video",
       {
         youtube: { title, ...YOUTUBE_DEFAULTS },
@@ -303,6 +302,7 @@ export async function POST(req: NextRequest) {
   // every Buffer sentAt window passes.
   if (youtubeBufferId) {
     const { error: ytInsertError } = await supabase.from("posts").insert({
+      id: youtubePostId,
       platform: "youtube",
       status: "sent_to_buffer",
       title,
@@ -355,7 +355,7 @@ export async function POST(req: NextRequest) {
     xBufferId = await sendToBuffer(
       xChannelId,
       caption,
-      signed.signedUrl,
+      buildProxyUrl(xPostId),
       "video",
       { captionLimit: X_CAPTION_LIMIT },
     );
@@ -369,6 +369,7 @@ export async function POST(req: NextRequest) {
   // file after every leg's Buffer sentAt has aged past the grace window.
   if (xBufferId) {
     const { error: xInsertError } = await supabase.from("posts").insert({
+      id: xPostId,
       platform: "x_acq_official",
       status: "sent_to_buffer",
       title,
@@ -414,7 +415,7 @@ export async function POST(req: NextRequest) {
       linkedinBufferId = await sendToBuffer(
         liChannelId,
         caption,
-        signed.signedUrl,
+        buildProxyUrl(linkedinPostId),
         "video",
         { captionLimit: LINKEDIN_CAPTION_LIMIT },
       );
@@ -426,6 +427,7 @@ export async function POST(req: NextRequest) {
 
   if (linkedinBufferId) {
     const { error: liInsertError } = await supabase.from("posts").insert({
+      id: linkedinPostId,
       platform: "linkedin",
       status: "sent_to_buffer",
       title,

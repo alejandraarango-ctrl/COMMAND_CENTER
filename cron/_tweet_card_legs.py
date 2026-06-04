@@ -42,7 +42,7 @@ from core.database import (
     record_buffer_handoff,
     update_post,
 )
-from core.media import get_signed_url
+from core.media import build_proxy_url
 from core.models import Post
 
 
@@ -58,16 +58,6 @@ _PG_UNIQUE_VIOLATION = "23505"
 # because it's identical across TikTok/FB/LI and the unified pipelines
 # treat it as a single string.
 BUFFER_CAPTION = "Agree?"
-
-# 30-day signed-URL expiry. Buffer downloads the asset lazily from its
-# queue, and with schedulingType=automatic + mode=addToQueue a post can
-# sit in the queue for 1-2 weeks before its slot comes up. A 7-day expiry
-# (the old value) meant any post that backed up past a week had a dead URL
-# by the time Buffer fetched it, surfacing as Buffer's generic "An unknown
-# error has occurred" on the queued post. 30 days clears a 1-2 week queue
-# with comfortable margin. Supabase signed URLs are JWT-based with no
-# practical max, so a longer TTL is safe.
-SIGNED_URL_EXPIRES_IN = 2592000
 
 
 def _is_unique_violation(exc: Exception) -> bool:
@@ -247,7 +237,10 @@ def send_leg(
         }
 
     try:
-        media_url = get_signed_url(storage_path, expires_in=SIGNED_URL_EXPIRES_IN)
+        # Permanent proxy URL — never expires. The /api/media/<post_id> endpoint
+        # re-signs the Supabase storage path on every request, so Buffer always
+        # gets a live download link even if the post sits in the queue for weeks.
+        media_url = build_proxy_url(post_id)
         # buffer_body is what Buffer publishes — never the tweet text.
         # The tweet text is already rendered onto the image and would
         # duplicate visually if sent again. Defaults to BUFFER_CAPTION

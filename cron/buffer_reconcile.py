@@ -41,7 +41,7 @@ from core.database import (
     update_post,
 )
 from core.env_diag import log_env_diagnostics
-from core.media import get_signed_url
+from core.media import build_proxy_url
 from core.models import Post
 from platforms.threads import Threads
 
@@ -67,10 +67,6 @@ INTER_READ_SLEEP_SECONDS = 1.0
 # 40 posts/day of drain capacity; if steady-state volume ever exceeds that,
 # raise this cap or the run frequency (see schedule in render.yaml).
 RECONCILE_BATCH_LIMIT = 40
-# Fresh signed-URL lifetime for a re-send: 30 days, matching the send paths so
-# the re-queued post survives another long stint in Buffer's queue.
-RESEND_SIGNED_URL_EXPIRES_IN = 2592000
-
 # Scheduler-path adapters that publish via Buffer. Their posts are text-only and
 # rebuilt deterministically from the row, so reconcile re-sends by re-running the
 # adapter (which knows the Threads mutation) rather than via send_to_buffer.
@@ -121,9 +117,9 @@ def _resend(post: dict, replay: dict) -> str:
     media_type = replay.get("media_type")
 
     if media_type and media_urls:
-        # Re-mint the signed URL — the original may have expired, which is the
-        # very failure mode we're recovering from.
-        url = get_signed_url(media_urls[0], expires_in=RESEND_SIGNED_URL_EXPIRES_IN)
+        # Use the permanent proxy URL — it re-signs on every request, so it
+        # never expires regardless of how long the post stays in Buffer's queue.
+        url = build_proxy_url(post["id"])
         return send_to_buffer(
             replay["channel_id"],
             replay["body"],
