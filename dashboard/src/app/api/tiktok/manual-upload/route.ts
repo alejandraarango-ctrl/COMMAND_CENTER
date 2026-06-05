@@ -195,6 +195,39 @@ export async function POST(req: NextRequest) {
   const xPostId = crypto.randomUUID();
   const linkedinPostId = crypto.randomUUID();
 
+  // Insert the TikTok posts row BEFORE sending to Buffer. Buffer validates
+  // the media URL synchronously when it accepts the post, and our proxy URL
+  // (/api/media/<id>) only resolves once a posts row with this id exists —
+  // otherwise the lookup 404s and Buffer rejects the post with "Video URL is
+  // not accessible". So we mirror cron/tiktok_pipeline.py's "insert first,
+  // then send" order. platform_post_id is filled in after Buffer returns its
+  // id (we don't have it yet at insert time).
+  const { error: tiktokInsertError } = await supabase.from("posts").insert({
+    id: tiktokPostId,
+    platform: "tiktok",
+    status: "sent_to_buffer",
+    title,
+    caption,
+    media_type: "video",
+    media_urls: [storagePath],
+    metadata: {
+      source: "manual_upload",
+      storage_cleanup_status: "pending",
+    },
+  });
+  // A unique violation can only come from a repeated explicit `id` here
+  // (manual_upload rows are excluded from the dedup index by migration
+  // 20260512000000), which won't happen with a fresh crypto.randomUUID().
+  // Keep the guard defensively but only hard-fail on genuine DB errors
+  // (schema drift, connection failure) — those shouldn't be masked.
+  if (tiktokInsertError && !isUniqueViolation(tiktokInsertError)) {
+    console.error("TikTok post insert failed: %s", tiktokInsertError.message);
+    return NextResponse.json(
+      { error: `Post insert failed: ${tiktokInsertError.message}` },
+      { status: 500 },
+    );
+  }
+
   // Queue the video on Buffer's TikTok channel. sendToBuffer truncates the
   // caption to TikTok's 150-char limit on its own.
   let tiktokChannelId: string;
@@ -209,132 +242,103 @@ export async function POST(req: NextRequest) {
     );
   } catch (err) {
     console.error("Buffer TikTok send failed:", (err as Error).message);
-    // Nothing to roll back — the file already lives in Storage (uploaded
-    // by the browser). The cleanup cron won't pick it up because no posts
-    // row references it, so we'd leak the bytes. Surface a clear error so
-    // a future TTL job can sweep unclaimed manual/<userId>/* objects.
+    // Roll back the row we just inserted so the storage-cleanup cron (which
+    // groups by storage path) doesn't see an orphan posts row pointing at a
+    // file that never reached Buffer. The mp4 itself still lives in Storage
+    // (uploaded by the browser); with no posts row referencing it, a future
+    // TTL sweep of unclaimed manual/<userId>/* objects can reclaim the bytes.
+    await supabase.from("posts").delete().eq("id", tiktokPostId);
     return NextResponse.json(
       { error: `Buffer send failed: ${(err as Error).message}` },
       { status: 502 },
     );
   }
 
-  // Record the TikTok post. platform_post_id holds the Buffer ID so the
-  // cleanup cron and buffer_reconcile can query Buffer for sentAt later.
-  const { error: tiktokInsertError } = await supabase
+  // Buffer accepted the post — stamp its id onto the row so the cleanup cron
+  // and buffer_reconcile can query Buffer for sentAt later. A failed update
+  // here is only a bookkeeping miss (the post is already queued), so we log
+  // loudly but keep going with the YouTube / X fan-out rather than bailing.
+  const { error: tiktokUpdateError } = await supabase
     .from("posts")
-    .insert({
-      id: tiktokPostId,
-      platform: "tiktok",
-      status: "sent_to_buffer",
-      title,
-      caption,
-      media_type: "video",
-      media_urls: [storagePath],
+    .update({
       platform_post_id: tiktokBufferId,
       metadata: {
         source: "manual_upload",
         buffer_post_id: tiktokBufferId,
         storage_cleanup_status: "pending",
       },
-    });
-
-  // Track the TikTok insert outcome but DON'T bail on a unique-violation.
-  // Buffer has already accepted the TikTok post (we have tiktokBufferId),
-  // and the user still wants the YouTube / LinkedIn fan-out to run. The
-  // 20260512000000 migration removes manual_upload rows from the dedup
-  // index, so this branch is rare going forward — but we keep the
-  // graceful-continue behaviour so any other partial unique index that
-  // matches (existing or future) doesn't shortcut the fan-out.
-  //
-  // From the user's POV a dedup is not a failure: Buffer queued the
-  // post, only the bookkeeping row was skipped. We log a warning but
-  // don't surface anything to the UI so the slot shows a clean
-  // "uploaded" state. Non-dedup DB errors still bail with 500: those
-  // indicate something more serious (schema drift, connection failure)
-  // and shouldn't be silently masked.
-  if (tiktokInsertError) {
-    if (isUniqueViolation(tiktokInsertError)) {
-      console.warn(
-        "TikTok post insert deduplicated (Buffer id=%s) — continuing fan-out",
-        tiktokBufferId,
-      );
-    } else {
-      console.error(
-        "TikTok post insert failed (Buffer id=%s): %s",
-        tiktokBufferId,
-        tiktokInsertError.message,
-      );
-      return NextResponse.json(
-        {
-          error: `Post insert failed: ${tiktokInsertError.message}`,
-          tiktokBufferId,
-        },
-        { status: 500 },
-      );
-    }
+    })
+    .eq("id", tiktokPostId);
+  if (tiktokUpdateError) {
+    console.error(
+      "TikTok post update failed (Buffer id=%s): %s",
+      tiktokBufferId,
+      tiktokUpdateError.message,
+    );
   }
 
-  // Fan out to Buffer's YouTube channel. Failures here are reported as
-  // partial success — TikTok is already queued and we can't un-queue it,
-  // so surface the YouTube error without rolling anything back.
+  // Fan out to Buffer's YouTube channel. Same insert-before-send order as
+  // TikTok so the proxy URL resolves when Buffer validates it. Failures here
+  // are partial success — TikTok is already queued and we can't un-queue it —
+  // so on any error we delete this leg's row and surface youtubeError without
+  // rolling back the TikTok post.
   let youtubeBufferId: string | undefined;
   let youtubeError: string | undefined;
-  try {
-    const ytChannelId = await getChannelId(undefined, "youtube");
-    youtubeBufferId = await sendToBuffer(
-      ytChannelId,
-      caption,
-      buildProxyUrl(youtubePostId),
-      "video",
-      {
-        youtube: { title, ...YOUTUBE_DEFAULTS },
-        captionLimit: 5000,
-      },
-    );
-  } catch (err) {
-    youtubeError = (err as Error).message;
-    console.error("Buffer YouTube send failed:", youtubeError);
-  }
-
-  // If YouTube succeeded, record its posts row too. Same storage path so
-  // the cleanup cron groups all rows and only deletes the file after
-  // every Buffer sentAt window passes.
-  if (youtubeBufferId) {
-    const { error: ytInsertError } = await supabase.from("posts").insert({
-      id: youtubePostId,
-      platform: "youtube",
-      status: "sent_to_buffer",
-      title,
-      caption,
-      media_type: "video",
-      media_urls: [storagePath],
-      platform_post_id: youtubeBufferId,
-      metadata: {
-        source: "manual_upload",
-        buffer_post_id: youtubeBufferId,
-        storage_cleanup_status: "pending",
-      },
-    });
-    if (ytInsertError) {
-      // Dedup is a bookkeeping issue, not a failed upload — Buffer
-      // already accepted the post and returned a buffer id. Keep the
-      // buffer id and don't surface a *Error: from the user's POV the
-      // upload succeeded. Non-dedup DB errors still surface (schema
-      // drift, connection failure, etc. are worth investigating).
-      if (isUniqueViolation(ytInsertError)) {
-        console.warn(
-          "YouTube post insert deduplicated (Buffer id=%s)",
-          youtubeBufferId,
-        );
-      } else {
-        youtubeError = `YouTube post insert failed: ${ytInsertError.message}`;
+  const { error: ytInsertError } = await supabase.from("posts").insert({
+    id: youtubePostId,
+    platform: "youtube",
+    status: "sent_to_buffer",
+    title,
+    caption,
+    media_type: "video",
+    media_urls: [storagePath],
+    metadata: {
+      source: "manual_upload",
+      storage_cleanup_status: "pending",
+    },
+  });
+  if (ytInsertError && !isUniqueViolation(ytInsertError)) {
+    youtubeError = `YouTube post insert failed: ${ytInsertError.message}`;
+    console.error("YouTube post insert failed: %s", ytInsertError.message);
+  } else {
+    try {
+      const ytChannelId = await getChannelId(undefined, "youtube");
+      youtubeBufferId = await sendToBuffer(
+        ytChannelId,
+        caption,
+        buildProxyUrl(youtubePostId),
+        "video",
+        {
+          youtube: { title, ...YOUTUBE_DEFAULTS },
+          captionLimit: 5000,
+        },
+      );
+    } catch (err) {
+      youtubeError = (err as Error).message;
+      console.error("Buffer YouTube send failed:", youtubeError);
+      // Roll back the row we inserted for this leg — Buffer never queued it.
+      await supabase.from("posts").delete().eq("id", youtubePostId);
+    }
+    // Buffer accepted it — stamp the buffer id onto the row. A failed update
+    // is a bookkeeping miss only (the post is queued), so log and continue.
+    if (youtubeBufferId) {
+      const { error: ytUpdateError } = await supabase
+        .from("posts")
+        .update({
+          platform_post_id: youtubeBufferId,
+          metadata: {
+            source: "manual_upload",
+            buffer_post_id: youtubeBufferId,
+            storage_cleanup_status: "pending",
+          },
+        })
+        .eq("id", youtubePostId);
+      if (ytUpdateError) {
         console.error(
-          "YouTube post insert failed (Buffer id=%s): %s",
+          "YouTube post update failed (Buffer id=%s): %s",
           youtubeBufferId,
-          ytInsertError.message,
+          ytUpdateError.message,
         );
-        youtubeBufferId = undefined;
       }
     }
   }
@@ -350,56 +354,64 @@ export async function POST(req: NextRequest) {
   // stale/legacy twitter channel that's still listed in the org.
   let xBufferId: string | undefined;
   let xError: string | undefined;
-  try {
-    const xChannelId = await getChannelId(undefined, "twitter", X_CHANNEL_NAME);
-    xBufferId = await sendToBuffer(
-      xChannelId,
-      caption,
-      buildProxyUrl(xPostId),
-      "video",
-      { captionLimit: X_CAPTION_LIMIT },
-    );
-  } catch (err) {
-    xError = (err as Error).message;
-    console.error("Buffer X send failed:", xError);
-  }
-
-  // If X succeeded, record its posts row too. Same media_urls so the
-  // cleanup cron groups all rows by storage path and only deletes the
-  // file after every leg's Buffer sentAt has aged past the grace window.
-  if (xBufferId) {
-    const { error: xInsertError } = await supabase.from("posts").insert({
-      id: xPostId,
-      platform: "x_acq_official",
-      status: "sent_to_buffer",
-      title,
-      caption,
-      media_type: "video",
-      media_urls: [storagePath],
-      platform_post_id: xBufferId,
-      metadata: {
-        source: "manual_upload",
-        buffer_post_id: xBufferId,
-        storage_cleanup_status: "pending",
-      },
-    });
-    if (xInsertError) {
-      // Dedup is a bookkeeping issue, not a failed upload — same
-      // treatment as the YouTube branch above. Keep the buffer id and
-      // log a warning so the slot still shows "uploaded".
-      if (isUniqueViolation(xInsertError)) {
-        console.warn(
-          "X post insert deduplicated (Buffer id=%s)",
-          xBufferId,
-        );
-      } else {
-        xError = `X post insert failed: ${xInsertError.message}`;
+  // Same insert-before-send order as the other legs so the proxy URL is live
+  // when Buffer validates it. Same media_urls so the cleanup cron groups all
+  // rows by storage path and only deletes the file after every leg's Buffer
+  // sentAt has aged past the grace window.
+  const { error: xInsertError } = await supabase.from("posts").insert({
+    id: xPostId,
+    platform: "x_acq_official",
+    status: "sent_to_buffer",
+    title,
+    caption,
+    media_type: "video",
+    media_urls: [storagePath],
+    metadata: {
+      source: "manual_upload",
+      storage_cleanup_status: "pending",
+    },
+  });
+  if (xInsertError && !isUniqueViolation(xInsertError)) {
+    xError = `X post insert failed: ${xInsertError.message}`;
+    console.error("X post insert failed: %s", xInsertError.message);
+  } else {
+    try {
+      const xChannelId = await getChannelId(
+        undefined,
+        "twitter",
+        X_CHANNEL_NAME,
+      );
+      xBufferId = await sendToBuffer(
+        xChannelId,
+        caption,
+        buildProxyUrl(xPostId),
+        "video",
+        { captionLimit: X_CAPTION_LIMIT },
+      );
+    } catch (err) {
+      xError = (err as Error).message;
+      console.error("Buffer X send failed:", xError);
+      // Roll back this leg's row — Buffer never queued it.
+      await supabase.from("posts").delete().eq("id", xPostId);
+    }
+    if (xBufferId) {
+      const { error: xUpdateError } = await supabase
+        .from("posts")
+        .update({
+          platform_post_id: xBufferId,
+          metadata: {
+            source: "manual_upload",
+            buffer_post_id: xBufferId,
+            storage_cleanup_status: "pending",
+          },
+        })
+        .eq("id", xPostId);
+      if (xUpdateError) {
         console.error(
-          "X post insert failed (Buffer id=%s): %s",
+          "X post update failed (Buffer id=%s): %s",
           xBufferId,
-          xInsertError.message,
+          xUpdateError.message,
         );
-        xBufferId = undefined;
       }
     }
   }
@@ -410,22 +422,8 @@ export async function POST(req: NextRequest) {
   let linkedinBufferId: string | undefined;
   let linkedinError: string | undefined;
   if (LINKEDIN_FANOUT_ENABLED) {
-    try {
-      const liChannelId = await getChannelId(undefined, "linkedin");
-      linkedinBufferId = await sendToBuffer(
-        liChannelId,
-        caption,
-        buildProxyUrl(linkedinPostId),
-        "video",
-        { captionLimit: LINKEDIN_CAPTION_LIMIT },
-      );
-    } catch (err) {
-      linkedinError = (err as Error).message;
-      console.error("Buffer LinkedIn send failed:", linkedinError);
-    }
-  }
-
-  if (linkedinBufferId) {
+    // Same insert-before-send order as the other legs so the proxy URL
+    // resolves when Buffer validates it.
     const { error: liInsertError } = await supabase.from("posts").insert({
       id: linkedinPostId,
       platform: "linkedin",
@@ -434,30 +432,49 @@ export async function POST(req: NextRequest) {
       caption,
       media_type: "video",
       media_urls: [storagePath],
-      platform_post_id: linkedinBufferId,
       metadata: {
         source: "manual_upload",
-        buffer_post_id: linkedinBufferId,
         storage_cleanup_status: "pending",
       },
     });
-    if (liInsertError) {
-      // Same dedup-is-not-a-failure treatment as YouTube above. Buffer
-      // already queued the LinkedIn post; we just couldn't insert the
-      // tracking row.
-      if (isUniqueViolation(liInsertError)) {
-        console.warn(
-          "LinkedIn post insert deduplicated (Buffer id=%s)",
-          linkedinBufferId,
+    if (liInsertError && !isUniqueViolation(liInsertError)) {
+      linkedinError = `LinkedIn post insert failed: ${liInsertError.message}`;
+      console.error("LinkedIn post insert failed: %s", liInsertError.message);
+    } else {
+      try {
+        const liChannelId = await getChannelId(undefined, "linkedin");
+        linkedinBufferId = await sendToBuffer(
+          liChannelId,
+          caption,
+          buildProxyUrl(linkedinPostId),
+          "video",
+          { captionLimit: LINKEDIN_CAPTION_LIMIT },
         );
-      } else {
-        linkedinError = `LinkedIn post insert failed: ${liInsertError.message}`;
-        console.error(
-          "LinkedIn post insert failed (Buffer id=%s): %s",
-          linkedinBufferId,
-          liInsertError.message,
-        );
-        linkedinBufferId = undefined;
+      } catch (err) {
+        linkedinError = (err as Error).message;
+        console.error("Buffer LinkedIn send failed:", linkedinError);
+        // Roll back this leg's row — Buffer never queued it.
+        await supabase.from("posts").delete().eq("id", linkedinPostId);
+      }
+      if (linkedinBufferId) {
+        const { error: liUpdateError } = await supabase
+          .from("posts")
+          .update({
+            platform_post_id: linkedinBufferId,
+            metadata: {
+              source: "manual_upload",
+              buffer_post_id: linkedinBufferId,
+              storage_cleanup_status: "pending",
+            },
+          })
+          .eq("id", linkedinPostId);
+        if (liUpdateError) {
+          console.error(
+            "LinkedIn post update failed (Buffer id=%s): %s",
+            linkedinBufferId,
+            liUpdateError.message,
+          );
+        }
       }
     }
   }
