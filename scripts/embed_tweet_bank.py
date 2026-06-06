@@ -11,6 +11,12 @@ Run it after applying the video_batch migration:
 Idempotent: it skips tweets already present (matched on tweet_id), so it's safe
 to re-run after adding rows to the CSV or if a previous run was interrupted.
 
+Upsert-only — it NEVER deletes. Adding rows to the CSV and re-running embeds the
+new ones, but REMOVING rows from the CSV does not prune them from the table;
+they linger and can still be retrieved by the caption RAG. To drop tweets you
+must delete them from the tweet_bank table directly (e.g. a one-off
+client.table("tweet_bank").delete().in_("tweet_id", [...])).
+
 Requires OPENAI_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_KEY in the env.
 """
 
@@ -30,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 # How many tweets to embed per OpenAI request. The embeddings endpoint accepts
 # large batches; 200 keeps each request well under token limits while cutting
-# round-trips for ~18K rows to ~90 calls.
+# round-trips for the ~4.9K-row bank to ~25 calls.
 _BATCH_SIZE = 200
 
 
@@ -83,7 +89,7 @@ def main() -> None:
     client = get_client()
 
     # Pull existing tweet_ids so re-runs only embed the gaps. Paginate because
-    # Supabase caps select page size; the bank is ~18K rows.
+    # Supabase caps select page size at 1000 rows per request.
     existing: set[str] = set()
     page = 0
     while True:

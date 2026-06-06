@@ -21,8 +21,8 @@ CREATE EXTENSION IF NOT EXISTS vector;
 -- can do nearest-neighbour search. Backfilled once by
 -- scripts/embed_tweet_bank.py after this migration runs. We keep the bank in
 -- its own table (not the CSV) because the RAG lookup needs the vectors in
--- Postgres where pgvector can rank them — re-embedding 18K tweets on every
--- upload would be far too slow and expensive.
+-- Postgres where pgvector can rank them — re-embedding the whole bank (~4.9K
+-- tweets) on every upload would be far too slow and expensive.
 -- IF NOT EXISTS on every CREATE so re-running the migration (e.g. a repeated
 -- `supabase db push` against a partially-applied DB) is a no-op rather than a
 -- hard error — matches the idempotent posture the backfill script already has.
@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS tweet_bank (
 -- training data — it builds fine on an empty table and grows correctly as the
 -- backfill inserts rows, so the recall is good without a manual post-backfill
 -- rebuild step. Slightly more memory/build cost than IVFFlat, negligible at
--- ~18K rows.
+-- ~5K rows.
 CREATE INDEX IF NOT EXISTS idx_tweet_bank_embedding
     ON tweet_bank USING hnsw (embedding vector_cosine_ops);
 

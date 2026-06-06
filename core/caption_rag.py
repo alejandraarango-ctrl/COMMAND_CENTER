@@ -14,8 +14,8 @@ video. We do this with a retrieve-then-rerank RAG lookup:
      *precision* step: embeddings get us close, but the LLM judges actual
      meaning (same core idea, same spirit) rather than mere keyword overlap.
 
-Why two stages instead of just the LLM? Sending all ~5K tweets to the model on
-every upload would be slow and expensive. Vector search cheaply narrows the
+Why two stages instead of just the LLM? Sending all ~4.9K tweets to the model
+on every upload would be slow and expensive. Vector search cheaply narrows the
 field to the best handful; the LLM only has to choose among those.
 
 Fallback: if the rerank is unavailable (a transient Anthropic error after
