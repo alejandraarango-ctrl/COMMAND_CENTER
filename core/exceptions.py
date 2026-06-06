@@ -81,13 +81,3 @@ class NonRetryablePlatformError(PlatformAPIError):
     The retry decorator (core/retry.py) raises immediately when it
     catches this class, bypassing the exponential-backoff loop.
     """
-
-
-class MediaProcessingError(CommandCenterError):
-    """Failed to process media (download, resize, transcode).
-
-    Raised during the media pipeline — downloading from Supabase Storage,
-    converting file formats, or uploading to the platform. Separate from
-    PlatformAPIError because media issues are usually local (disk space,
-    file corruption) rather than API problems.
-    """

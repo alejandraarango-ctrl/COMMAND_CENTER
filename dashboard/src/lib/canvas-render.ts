@@ -115,8 +115,8 @@ function wrapTextToLines(ctx: any, text: string, maxWidth: number, letterSpacing
   return result;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function computeLayout(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ctx: any,
   text: string,
   maxWidth: number,

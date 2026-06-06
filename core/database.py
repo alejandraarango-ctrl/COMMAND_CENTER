@@ -19,7 +19,7 @@ from datetime import datetime, timedelta, timezone
 
 from supabase import Client, create_client
 
-from core.models import CronRun, Post
+from core.models import Post
 
 logger = logging.getLogger(__name__)
 

@@ -126,8 +126,6 @@ const INACTIVE_PLATFORM_AGENTS: PlatformAgents[] = [
   },
 ];
 
-const PLATFORM_AGENTS = [...ACTIVE_PLATFORM_AGENTS, ...INACTIVE_PLATFORM_AGENTS];
-
 /* Shared workflow patterns that connect orchestrator to platform agents */
 const WORKFLOW_PATTERNS = [
   {

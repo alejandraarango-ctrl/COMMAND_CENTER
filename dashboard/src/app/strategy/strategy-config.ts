@@ -152,16 +152,6 @@ export const SOURCE_COLORS: Record<Source, string> = {
   words: "#888780", // Gray
 };
 
-// Darker variants. Reserved for a future light-mode build (where the
-// Experiment pill's text would need a darker shade to stay legible on a
-// pale background). Unused today because the dashboard is dark-only.
-export const SOURCE_DARK_COLORS: Record<Source, string> = {
-  live: "#993322",
-  event: "#534AB7",
-  dtc: "#0F6E56",
-  words: "#5F5E5A",
-};
-
 // ---------------------------------------------------------------------------
 // Source display labels (for the legend row).
 // ---------------------------------------------------------------------------

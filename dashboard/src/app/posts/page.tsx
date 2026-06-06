@@ -145,12 +145,7 @@ function PostsTable({ posts }: { posts: Post[] }) {
   );
 }
 
-export default async function PostsPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ platform?: string; status?: string }>;
-}) {
-  const params = await searchParams;
+export default async function PostsPage() {
   const supabase = getSupabaseClient();
 
   const { data: allPosts } = await supabase
