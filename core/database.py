@@ -101,6 +101,8 @@ def record_buffer_handoff(
     media_type: str | None,
     facebook_post_type: str | None = None,
     instagram_post_type: str | None = None,
+    youtube: dict | None = None,
+    caption_limit: int | None = None,
     base_metadata: dict | None = None,
 ) -> None:
     """Stamp a successful Buffer handoff and persist a replay payload.
@@ -111,6 +113,13 @@ def record_buffer_handoff(
     from the row because the Buffer body differs from `posts.caption` — the
     fan-out legs publish a constant hook ("Agree?") while `caption` stores the
     tweet text for dedup, and channel_id / post-type aren't on the row at all.
+
+    `youtube` and `caption_limit` exist for the batch-video fan-out: a YouTube
+    leg can't be re-sent without its publisher metadata block (Buffer rejects a
+    YouTube post with no category), and the YouTube/X legs use non-default
+    caption limits (5000 / 280) that must survive a replay or reconcile would
+    re-truncate to TikTok's 150. Both are persisted only when set, so the
+    other Buffer paths are unaffected.
 
     `metadata` is set wholesale by update_post (it's a single jsonb column), so
     we merge `buffer_replay` into `base_metadata` — the metadata the row was
@@ -127,6 +136,10 @@ def record_buffer_handoff(
         replay["facebook_post_type"] = facebook_post_type
     if instagram_post_type:
         replay["instagram_post_type"] = instagram_post_type
+    if youtube:
+        replay["youtube"] = youtube
+    if caption_limit is not None:
+        replay["caption_limit"] = caption_limit
 
     metadata = {**(base_metadata or {}), "buffer_replay": replay}
     update_post(post_id, platform_post_id=buffer_post_id, metadata=metadata)
@@ -341,6 +354,101 @@ def mark_schedule_picked_up(schedule_id: str) -> bool:
         .execute()
     )
     return len(result.data) > 0
+
+
+# ── Video batch jobs ─────────────────────────────────────────────────────
+# One row per uploaded mp4 in the batch manual-upload pathway. The dashboard
+# inserts a 'pending' row after the browser uploads to Storage, then spawns
+# `python -m core.video_batch --job-id <id>`. The processor claims the row,
+# transcribes/titles/captions/fans-out, and marks it done|failed. See
+# supabase/migrations/20260606120000_video_batch.sql for the table.
+
+
+def insert_video_batch_job(user_id: str, storage_path: str) -> str:
+    """Insert a pending video batch job. Returns the job ID."""
+    client = get_client()
+    result = (
+        client.table("video_batch_jobs")
+        .insert({"user_id": user_id, "storage_path": storage_path})
+        .execute()
+    )
+    if not result.data:
+        raise RuntimeError(
+            "insert_video_batch_job returned no rows — check RLS / schema"
+        )
+    return result.data[0]["id"]
+
+
+def get_video_batch_job(job_id: str) -> dict | None:
+    """Fetch a single job row, or None if it doesn't exist."""
+    client = get_client()
+    result = (
+        client.table("video_batch_jobs")
+        .select("*")
+        .eq("id", job_id)
+        .limit(1)
+        .execute()
+    )
+    return result.data[0] if result.data else None
+
+
+def claim_video_batch_job(job_id: str) -> bool:
+    """Atomically claim a pending job. Returns True if this call won the claim.
+
+    Only updates if status is still 'pending' — so a double-click in the UI or
+    a retry that races a still-running processor can't double-process (and thus
+    can't double-post to Buffer). The loser gets an empty result and bails.
+
+    Sets status='processing', stamps picked_up_at, and bumps attempts. attempts
+    is incremented with a read value rather than an atomic SQL expression
+    because the claim itself (the status guard) is what guarantees exactly one
+    winner; attempts is just a diagnostic counter.
+    """
+    client = get_client()
+    existing = get_video_batch_job(job_id)
+    attempts = (existing or {}).get("attempts", 0) if existing else 0
+    result = (
+        client.table("video_batch_jobs")
+        .update(
+            {
+                "status": "processing",
+                "picked_up_at": datetime.now(timezone.utc).isoformat(),
+                "attempts": attempts + 1,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+        .eq("id", job_id)
+        .eq("status", "pending")
+        .execute()
+    )
+    return len(result.data) > 0
+
+
+def update_video_batch_job(job_id: str, **fields) -> None:
+    """Update fields on a job row. Sanitizes error_message before storing.
+
+    Raises RuntimeError if the update touches zero rows (row missing or RLS
+    blocked the write), mirroring update_post — a silent no-op here would let a
+    job sit forever in 'processing' while everything looked healthy, hiding a
+    real DB/RLS misconfiguration.
+
+    IMPORTANT for callers in a failure path: core.video_batch marks a job
+    'failed' from inside an `except` block. A zero-row RuntimeError there would
+    SHADOW the original error, so that call site wraps this in its own
+    try/except (see core/video_batch.main) — same pattern as
+    scheduler.process_due_posts wrapping update_post.
+    """
+    client = get_client()
+    fields["updated_at"] = datetime.now(timezone.utc).isoformat()
+    if fields.get("error_message"):
+        fields["error_message"] = sanitize_error_message(fields["error_message"])
+    result = (
+        client.table("video_batch_jobs").update(fields).eq("id", job_id).execute()
+    )
+    if not result.data:
+        raise RuntimeError(
+            f"update_video_batch_job({job_id}) returned no rows — row missing or RLS blocked"
+        )
 
 
 def list_post_captions(platform: str) -> set[str]:
