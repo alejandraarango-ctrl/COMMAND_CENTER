@@ -80,12 +80,15 @@ def test_main_resolves_published_failed_and_queued(monkeypatch):
     # Failed row surfaces a buffer_error with the Buffer status in the reason.
     assert by_id["b"]["status"] == "buffer_error"
     assert "error" in by_id["b"]["error_message"]
-    # Queued and no-record rows are left untouched.
+    # Queued row is left untouched.
     assert "c" not in by_id
-    assert "d" not in by_id
-    # Run succeeds; 2 posts resolved (1 published + 1 failed).
+    # No-record row resolves as a terminal buffer_error (per #68): Buffer has
+    # no record of it, so it can never publish and must not stay stuck.
+    assert by_id["d"]["status"] == "buffer_error"
+    assert "not found" in by_id["d"]["error_message"]
+    # Run succeeds; 3 posts resolved (1 published + 2 failed: b and d).
     assert finished["status"] == "success"
-    assert finished["posts_processed"] == 2
+    assert finished["posts_processed"] == 3
 
 
 def test_main_isolates_per_post_errors(monkeypatch):
