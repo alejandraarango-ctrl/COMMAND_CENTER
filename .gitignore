@@ -32,6 +32,7 @@ Thumbs.db
 
 # Claude Code local state (worktrees, etc)
 .claude/worktrees/
+.claude/scheduled_tasks.lock
 
 # Generated media (transient — created by ig-pipeline, not committed)
 exports/
