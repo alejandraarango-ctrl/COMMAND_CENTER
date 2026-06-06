@@ -17,11 +17,9 @@ from __future__ import annotations
 import logging
 import os
 import re
-from pathlib import Path
 from urllib.parse import unquote
 
 import httpx
-from supabase import Client
 
 from core.database import get_client
 
@@ -74,8 +72,15 @@ def _sanitize_filename(url: str) -> str:
     return sanitized
 
 
-def download_file(url: str, dest_dir: str = "/tmp") -> str:
-    """Download a file from a URL to a local path. Returns the local path."""
+def download_file(
+    url: str, dest_dir: str = "/tmp", max_bytes: int = MAX_FILE_SIZE
+) -> str:
+    """Download a file from a URL to a local path. Returns the local path.
+
+    `max_bytes` caps the download size (default: MAX_FILE_SIZE, 100 MB). The
+    batch-video pathway raises this to allow the larger (up to 2 GB) videos the
+    manual uploader accepts; everyday callers keep the conservative default.
+    """
     filename = _sanitize_filename(url)
     dest = os.path.join(dest_dir, filename)
 
@@ -99,10 +104,10 @@ def download_file(url: str, dest_dir: str = "/tmp") -> str:
 
         # Pre-check Content-Length if the server provides it
         content_length = response.headers.get("content-length")
-        if content_length and int(content_length) > MAX_FILE_SIZE:
+        if content_length and int(content_length) > max_bytes:
             raise ValueError(
                 f"File too large: {int(content_length)} bytes "
-                f"(max {MAX_FILE_SIZE} bytes)"
+                f"(max {max_bytes} bytes)"
             )
 
         # Stream to disk with a running byte count as a safety net
@@ -110,12 +115,12 @@ def download_file(url: str, dest_dir: str = "/tmp") -> str:
         with open(dest, "wb") as f:
             for chunk in response.iter_bytes(chunk_size=8192):
                 bytes_written += len(chunk)
-                if bytes_written > MAX_FILE_SIZE:
+                if bytes_written > max_bytes:
                     f.close()
                     os.remove(dest)
                     raise ValueError(
                         f"File exceeded max size during download "
-                        f"({bytes_written} bytes, max {MAX_FILE_SIZE})"
+                        f"({bytes_written} bytes, max {max_bytes})"
                     )
                 f.write(chunk)
 

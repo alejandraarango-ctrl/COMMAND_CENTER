@@ -43,23 +43,36 @@ def _good_deepgram_body(transcript: str) -> dict:
 # ── extract_audio (ffmpeg) ───────────────────────────────────────────────
 
 
-def test_extract_audio_raises_on_ffmpeg_nonzero_exit(monkeypatch):
+def test_extract_audio_raises_on_ffmpeg_nonzero_exit(monkeypatch, tmp_path):
+    # The downloaded video is a real temp file so we can assert it's cleaned up
+    # even when ffmpeg fails.
+    video = tmp_path / "x.mp4"
+    video.write_bytes(b"fake video")
     monkeypatch.setattr(tr, "get_signed_url", lambda sp: "https://signed/x.mp4")
+    monkeypatch.setattr(tr, "download_file", lambda url, **k: str(video))
     monkeypatch.setattr(tr, "_ffmpeg_exe", lambda: "ffmpeg")
     monkeypatch.setattr(
         tr.subprocess, "run",
         lambda *a, **k: SimpleNamespace(returncode=1, stderr="bad input\nfatal"),
     )
 
-    with pytest.raises(RuntimeError, match="ffmpeg audio extraction failed"):
+    # The message must carry the exit code (the old version surfaced only the
+    # ffmpeg startup banner when it died early).
+    with pytest.raises(RuntimeError, match=r"ffmpeg audio extraction failed \(exit 1\)"):
         tr.extract_audio("tiktok/manual/u1/x.mp4")
 
+    # The downloaded video is removed even on failure (no /tmp leak).
+    assert not video.exists()
 
-def test_extract_audio_includes_protocol_whitelist(monkeypatch):
-    # The signed-URL hardening (finding #4): ffmpeg must be pinned to a known
-    # protocol allow-list so a malicious input can't coax it into other schemes.
+
+def test_extract_audio_feeds_local_path_with_file_whitelist(monkeypatch, tmp_path):
+    # ffmpeg now reads the locally-downloaded file, so the input is that path
+    # (not the signed URL) and the protocol allow-list is pinned to `file`.
+    video = tmp_path / "x.mp4"
+    video.write_bytes(b"fake video")
     captured: dict = {}
     monkeypatch.setattr(tr, "get_signed_url", lambda sp: "https://signed/x.mp4")
+    monkeypatch.setattr(tr, "download_file", lambda url, **k: str(video))
     monkeypatch.setattr(tr, "_ffmpeg_exe", lambda: "ffmpeg")
 
     def fake_run(cmd, **k):
@@ -68,11 +81,40 @@ def test_extract_audio_includes_protocol_whitelist(monkeypatch):
 
     monkeypatch.setattr(tr.subprocess, "run", fake_run)
 
-    tr.extract_audio("tiktok/manual/u1/x.mp4")
+    out = tr.extract_audio("tiktok/manual/u1/x.mp4")
 
     cmd = captured["cmd"]
-    assert "-protocol_whitelist" in cmd
-    assert cmd[cmd.index("-protocol_whitelist") + 1] == "file,http,https,tcp,tls"
+    assert cmd[cmd.index("-protocol_whitelist") + 1] == "file"
+    # The input is the local file, not the remote URL.
+    assert cmd[cmd.index("-i") + 1] == str(video)
+    assert "https://signed/x.mp4" not in cmd
+    # Output mp3 path is returned; downloaded video is cleaned up on success.
+    assert out.endswith(".mp3")
+    assert not video.exists()
+
+
+def test_extract_audio_passes_2gb_cap_to_download(monkeypatch, tmp_path):
+    # The batch path must lift download_file's default 100 MB cap so the larger
+    # videos the uploader accepts aren't rejected before ffmpeg ever runs.
+    video = tmp_path / "x.mp4"
+    video.write_bytes(b"fake video")
+    captured: dict = {}
+    monkeypatch.setattr(tr, "get_signed_url", lambda sp: "https://signed/x.mp4")
+
+    def fake_download(url, **kwargs):
+        captured["kwargs"] = kwargs
+        return str(video)
+
+    monkeypatch.setattr(tr, "download_file", fake_download)
+    monkeypatch.setattr(tr, "_ffmpeg_exe", lambda: "ffmpeg")
+    monkeypatch.setattr(
+        tr.subprocess, "run",
+        lambda *a, **k: SimpleNamespace(returncode=0, stderr=""),
+    )
+
+    tr.extract_audio("tiktok/manual/u1/x.mp4")
+
+    assert captured["kwargs"]["max_bytes"] == tr._MAX_VIDEO_BYTES
 
 
 # ── transcribe (Deepgram) ────────────────────────────────────────────────
