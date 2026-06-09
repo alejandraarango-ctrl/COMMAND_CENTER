@@ -328,6 +328,9 @@ def main():
                 tweet_caption=caption,
                 fb_storage_path=fb_path,
                 ig_storage_path=ig_path,
+                # This tweet's TikTok MP4 path — reused for the IG reel when
+                # IG_TWEET_CARD_FORMAT='video' (the default).
+                tiktok_storage_path=storage_path,
                 fb_channel_id=fb_channel_id,
                 li_channel_id=li_channel_id,
                 ig_channel_id=ig_channel_id,
