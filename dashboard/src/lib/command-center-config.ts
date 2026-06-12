@@ -157,29 +157,29 @@ export const FORMATS: Format[] = [
     status: "live",
     creator: "alex",
     subgroup: "distribution",
-    // Matches the actual fan-out in /api/tiktok/manual-upload: TikTok,
-    // YouTube Shorts, LinkedIn (gated by LINKEDIN_FANOUT_ENABLED but
-    // listed because the gate is expected to flip back on), and X via
-    // the Twitter bridge (service="twitter", channel="acq_official").
-    // Instagram is NOT a destination of this workflow — the previous
-    // entry had it listed in error.
+    // Matches the actual fan-out in the batch processor (core/video_batch.py,
+    // triggered via /api/tiktok/manual-upload/batch): TikTok, YouTube Shorts,
+    // and X via the Twitter bridge (service="twitter", channel="acq_official").
+    // LinkedIn was only a leg of the deleted manual title+caption route and
+    // is no longer a destination. Instagram is NOT a destination of this
+    // workflow — the previous entry had it listed in error.
     platforms: [
       { id: "tiktok", name: "TikTok" },
       { id: "youtube", name: "YouTube" },
-      { id: "linkedin", name: "LinkedIn" },
       { id: "x", name: "X" },
     ],
-    // Links to the manual-upload page — user-triggered form that fans the
-    // same video out to TikTok, YouTube Shorts, and LinkedIn (and X via
-    // the Twitter bridge). The "multi-platform syndication" subtitle on
-    // this card describes exactly what /manual-upload does, so it's the
-    // natural detail surface. API endpoints stay at
-    // /api/tiktok/manual-upload — backend routes were not renamed.
+    // Links to the manual-upload page — user-triggered batch upload that
+    // fans the same video out to TikTok, YouTube Shorts, and X (via the
+    // Twitter bridge), with title + caption generated automatically. The
+    // "multi-platform syndication" subtitle on this card describes exactly
+    // what /manual-upload does, so it's the natural detail surface. API
+    // endpoints stay at /api/tiktok/manual-upload — backend routes were
+    // not renamed.
     href: "/manual-upload",
-    // The route writes 4 posts per upload, one per platform. The X leg
+    // The processor writes 3 posts per upload, one per platform. The X leg
     // lands as platform="x_acq_official" (not "twitter") — see
-    // /api/tiktok/manual-upload/route.ts.
-    healthPlatforms: ["tiktok", "youtube", "x_acq_official", "linkedin"],
+    // core/video_batch.py.
+    healthPlatforms: ["tiktok", "youtube", "x_acq_official"],
   },
   {
     id: "tweet-cards",

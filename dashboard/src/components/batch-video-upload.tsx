@@ -22,9 +22,6 @@
  * Concurrency is capped (MAX_CONCURRENT): dropping a folder of files no longer
  * fires every upload + 5-min Python spawn at once, which could OOM the Render
  * web instance. Files past the cap sit in "queued" and start as slots free up.
- *
- * Sibling of tiktok-upload-queue.tsx (the manual title+caption pathway); the
- * sign-url + PUT mechanics mirror it.
  */
 
 import {

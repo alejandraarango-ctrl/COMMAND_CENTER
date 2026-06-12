@@ -1,7 +1,7 @@
 /**
  * POST /api/tiktok/manual-upload/sign-url
  *
- * Step 1 of the two-step TikTok manual upload flow (Pathway 3).
+ * Step 1 of the two-step batch upload flow (Pathway 3).
  *
  * Why this endpoint exists: the previous single-endpoint design tried to
  * receive the entire mp4 as multipart/form-data and re-upload it to
@@ -14,8 +14,8 @@
  * This endpoint mints a Supabase Storage signed upload URL scoped to a
  * single object path. The browser PUTs the mp4 directly to that URL —
  * a single HTTP request, with progress tracked via XHR. Once the upload
- * completes, the browser calls POST /api/tiktok/manual-upload to
- * finalize (sign a 7-day read URL + run Buffer fan-out).
+ * completes, the browser calls POST /api/tiktok/manual-upload/batch to
+ * process the video (transcribe → title → caption → Buffer fan-out).
  *
  * Why single-PUT and not TUS resumable: we initially tried TUS
  * (`/storage/v1/upload/resumable`) using the createSignedUploadUrl token

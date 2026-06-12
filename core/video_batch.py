@@ -13,9 +13,9 @@ For one job it:
      (Claude, reusing core.youtube_title_generator) → picks a caption (RAG
      over the tweet bank).
   3. Fans the video out to Buffer for TikTok + YouTube Shorts + X, writing
-     `posts` rows in the SAME shape as the single-file manual upload
-     (metadata.source='manual_upload') so buffer_reconcile and
-     tiktok_storage_cleanup handle them with no changes.
+     `posts` rows tagged metadata.source='manual_upload' (the shape the
+     now-removed single-file manual upload established) so buffer_reconcile
+     and tiktok_storage_cleanup handle them with no changes.
   4. Marks the job done (or failed) and prints a one-line JSON result to
      stdout for the dashboard to relay back to the browser.
 
@@ -53,8 +53,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Defaults applied to every YouTube Shorts upload — mirrors YOUTUBE_DEFAULTS in
-# dashboard/src/app/api/tiktok/manual-upload/route.ts. `title` is supplied per
+# Defaults applied to every YouTube Shorts upload. `title` is supplied per
 # video from the generated title. Buffer rejects a YouTube post with no
 # category, so the full block goes on every call.
 YOUTUBE_DEFAULTS = {
@@ -198,7 +197,6 @@ def _send_leg(
 def fanout_video(job_id: str, storage_path: str, title: str, caption: str) -> dict:
     """Fan one video out to Buffer for TikTok + YouTube Shorts + X.
 
-    Replicates dashboard/src/app/api/tiktok/manual-upload/route.ts leg-for-leg.
     TikTok is the primary leg — if it fails, raises so the job is marked failed.
     YouTube and X are best-effort (partial success): a failure there is
     recorded in the returned dict (as `<platform>_error`) but doesn't fail the

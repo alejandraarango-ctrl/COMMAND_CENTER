@@ -1,10 +1,11 @@
 /**
  * YouTube Platform Detail Page
  *
- * YouTube posts originate from the TikTok manual-upload dialog on /manual-upload —
- * the same mp4 fans out to Buffer's TikTok and YouTube Shorts channels in
- * the same request. This page describes that flow and routes the user to
- * the dialog; no run button because there's no separate YouTube pipeline.
+ * YouTube posts originate from the batch upload on /manual-upload — each
+ * mp4 is transcribed, gets an auto-generated title and caption, and fans
+ * out to Buffer's TikTok and YouTube Shorts channels. This page describes
+ * that flow and routes the user to the upload page; no run button because
+ * there's no separate YouTube pipeline.
  */
 
 import Link from "next/link";
@@ -23,7 +24,8 @@ import { ArrowLeftIcon, UploadIcon } from "lucide-react";
 export const dynamic = "force-dynamic";
 
 const STEPS = [
-  "Open the Manual Upload dialog on /manual-upload",
+  "Drop videos into the batch upload on /manual-upload",
+  "Each mp4 is transcribed and gets an auto-generated title + caption",
   "Same mp4 is queued on Buffer's TikTok + YouTube Shorts channels",
   "Buffer auto-schedules each into its next open slot",
 ];
@@ -44,7 +46,7 @@ export default function YouTubePage() {
           <div>
             <h1 className="text-xl font-semibold">YouTube</h1>
             <p className="text-sm text-muted-foreground">
-              YouTube Shorts posts — queued via the TikTok manual-upload dialog
+              YouTube Shorts posts — queued via the batch upload on /manual-upload
             </p>
           </div>
         </div>
@@ -56,7 +58,7 @@ export default function YouTubePage() {
         <div className="flex flex-wrap gap-x-6 gap-y-1.5">
           <span>
             <span className="text-[var(--overview-fg)]/40">Trigger</span>{" "}
-            <span className="font-mono">Manual · /manual-upload upload dialog</span>
+            <span className="font-mono">Manual · /manual-upload batch upload</span>
           </span>
           <span>
             <span className="text-[var(--overview-fg)]/40">Source</span>{" "}
@@ -68,8 +70,8 @@ export default function YouTubePage() {
           </span>
         </div>
         <p className="mt-2 text-[var(--overview-fg)]/45">
-          No cron — YouTube Shorts are queued only when the operator uses the TikTok manual-upload dialog,
-          which fans out the same MP4 to Buffer&apos;s TikTok + YouTube Shorts channels in one request.
+          No cron — YouTube Shorts are queued only when the operator uses the batch upload,
+          which fans out the same MP4 to Buffer&apos;s TikTok + YouTube Shorts channels automatically.
         </p>
       </div>
 
@@ -80,7 +82,7 @@ export default function YouTubePage() {
               <Badge className="bg-white/[0.08] text-[var(--overview-fg)]/80 border-white/10 text-[11px]">
                 Pathway 1
               </Badge>
-              <CardTitle className="text-sm">Manual upload fan-out</CardTitle>
+              <CardTitle className="text-sm">Batch upload fan-out</CardTitle>
             </div>
             <Link href="/manual-upload">
               <Button size="sm">
@@ -102,7 +104,8 @@ export default function YouTubePage() {
             ))}
           </ol>
           <p className="mt-4 text-xs text-[var(--overview-fg)]/45">
-            User-triggered — no cron schedule. Title is required (YouTube needs one).
+            User-triggered — no cron schedule. The title YouTube needs is
+            generated automatically from the video&apos;s transcript.
           </p>
         </CardContent>
       </Card>
