@@ -5,11 +5,10 @@
  * padding) so the pill doesn't compete with the format name for
  * attention in the card header.
  *
- * Colors come from .claude/rules/dashboard.md: green-500 for success,
- * amber-500 for failing (reads as "attention" without the alarm of
- * red). Paused uses a double-bar glyph instead of a dot so
- * operator-disabled isn't visually conflated with "broken" — the
- * double-bar reads as a play-pause icon.
+ * All three states share one shape (mono uppercase pill + 7px dot),
+ * differing only by the --pill-* color token, matching the
+ * refined-terracotta mock: healthy → green, failing → red, paused →
+ * neutral/dim.
  */
 import type { FormatHealth } from "@/lib/command-center-config";
 
@@ -18,14 +17,19 @@ interface HealthPillProps {
 }
 
 export function HealthPill({ status }: HealthPillProps) {
+  // Mono uppercase pill with a tinted status background + a static 7px dot
+  // — matched 1-to-1 to the refined-terracotta mock's `.pill`. Colors come
+  // from the --pill-* tokens in globals.css.
+  const base =
+    "inline-flex items-center gap-[7px] rounded-full px-[11px] py-[5px] font-mono text-[10px] uppercase tracking-[0.12em]";
+
   if (status === "healthy") {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-[2px] text-[10px] font-medium tracking-[0.02em] text-white/70">
-        <span
-          aria-hidden
-          className="h-[5px] w-[5px] rounded-full"
-          style={{ backgroundColor: "#22c55e" }}
-        />
+      <span
+        className={base}
+        style={{ backgroundColor: "var(--pill-ok-bg)", color: "var(--pill-ok-fg)" }}
+      >
+        <span aria-hidden className="h-[7px] w-[7px] rounded-full bg-current" />
         Healthy
       </span>
     );
@@ -33,23 +37,22 @@ export function HealthPill({ status }: HealthPillProps) {
 
   if (status === "failing") {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-[2px] text-[10px] font-medium tracking-[0.02em] text-white/75">
-        <span
-          aria-hidden
-          className="h-[5px] w-[5px] rounded-full"
-          style={{ backgroundColor: "#f59e0b" }}
-        />
+      <span
+        className={base}
+        style={{ backgroundColor: "var(--pill-warn-bg)", color: "var(--pill-warn-fg)" }}
+      >
+        <span aria-hidden className="h-[7px] w-[7px] rounded-full bg-current" />
         Failing
       </span>
     );
   }
 
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.06] bg-white/[0.03] px-2 py-[2px] text-[10px] font-medium tracking-[0.02em] text-white/40">
-      <span aria-hidden className="inline-flex items-center gap-[2px]">
-        <span className="h-[6px] w-[1.5px] rounded-[0.5px] bg-white/40" />
-        <span className="h-[6px] w-[1.5px] rounded-[0.5px] bg-white/40" />
-      </span>
+    <span
+      className={base}
+      style={{ backgroundColor: "var(--pill-idle-bg)", color: "var(--pill-idle-fg)" }}
+    >
+      <span aria-hidden className="h-[7px] w-[7px] rounded-full bg-current" />
       Paused
     </span>
   );

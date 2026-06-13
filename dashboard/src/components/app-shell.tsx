@@ -22,43 +22,38 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   return (
-    <div
-      className="min-h-screen relative"
-      style={{ backgroundColor: "var(--overview-bg)", color: "var(--overview-fg)" }}
-    >
-      {/* Ambient terracotta radial — same pattern as the home page. */}
-      <div
-        aria-hidden
-        className="fixed inset-0 -z-10 pointer-events-none"
-        style={{
-          backgroundImage:
-            "radial-gradient(ellipse 1400px 700px at 50% -10%, rgba(174,86,48,0.08), transparent 60%), radial-gradient(ellipse 800px 500px at 90% 10%, rgba(174,86,48,0.03), transparent 55%)",
-        }}
-      />
-
+    // The warm radial + grain now live globally (see layout.tsx
+    // .app-atmosphere), so this shell no longer paints its own background
+    // wash — it just sets the text color and lets the body bg show through.
+    <div className="min-h-screen relative" style={{ color: "var(--overview-fg)" }}>
       <header
         className="sticky top-0 z-50 border-b"
         style={{
-          borderColor: "var(--card-warm-border)",
-          backgroundColor: "rgba(24,19,15,0.85)",
-          backdropFilter: "blur(8px)",
-          WebkitBackdropFilter: "blur(8px)",
+          borderColor: "var(--surface-border)",
+          backgroundColor: "rgba(24,19,15,0.72)",
+          backdropFilter: "blur(12px) saturate(1.2)",
+          WebkitBackdropFilter: "blur(12px) saturate(1.2)",
         }}
       >
         <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-8">
-          {/* Wordmark */}
-          <Link href="/" className="flex items-center gap-2 shrink-0">
-            <span className="text-[12px] font-semibold tracking-[0.22em] uppercase text-[var(--overview-fg)]/90">
+          {/* Wordmark — a small terracotta pip leads the mark, with the
+              name in a tracked uppercase mono-adjacent voice. */}
+          <Link href="/" className="group flex items-center gap-2.5 shrink-0">
+            <span
+              className="h-[7px] w-[7px] rounded-full transition-shadow duration-200"
+              style={{
+                backgroundColor: "var(--terracotta)",
+                boxShadow: "var(--glow-terra)",
+              }}
+            />
+            <span className="text-[12px] font-semibold tracking-[0.24em] uppercase text-[var(--overview-fg)]/90 transition-colors group-hover:text-[var(--overview-fg)]">
               Command Center
             </span>
-            <span
-              className="h-[5px] w-[5px] rounded-full"
-              style={{ backgroundColor: "var(--terracotta)" }}
-            />
           </Link>
 
-          {/* Nav links */}
-          <nav className="flex items-center gap-1">
+          {/* Nav links — active route gets a soft terracotta wash + a thin
+              underline accent; inactive links warm to full opacity on hover. */}
+          <nav className="flex items-center gap-0.5">
             {NAV_ITEMS.map(({ label, href }) => {
               // Mark active when the pathname starts with the href (except
               // "/" which only matches exactly so it doesn't highlight on
@@ -69,18 +64,25 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <Link
                   key={href}
                   href={href}
-                  className="rounded-md px-3 py-1.5 text-[12px] transition-colors duration-150"
+                  className="relative rounded-lg px-3 py-1.5 text-[12.5px] transition-colors duration-150"
                   style={{
                     color: active
                       ? "var(--overview-fg)"
-                      : "rgba(237,234,224,0.45)",
+                      : "rgba(237,234,224,0.5)",
                     backgroundColor: active
-                      ? "rgba(174,86,48,0.12)"
+                      ? "var(--terracotta-soft)"
                       : "transparent",
                     fontWeight: active ? 500 : 400,
                   }}
                 >
                   {label}
+                  {active && (
+                    <span
+                      aria-hidden
+                      className="absolute inset-x-3 -bottom-px h-[1.5px] rounded-full"
+                      style={{ backgroundColor: "var(--terracotta)" }}
+                    />
+                  )}
                 </Link>
               );
             })}
@@ -90,7 +92,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-8 py-8">{children}</main>
+      <main className="mx-auto max-w-7xl px-8 py-10">{children}</main>
     </div>
   );
 }

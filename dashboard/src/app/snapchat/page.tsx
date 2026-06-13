@@ -122,15 +122,16 @@ function StatTile({
   return (
     <Card size="sm">
       <CardContent>
-        <div className="text-xs uppercase tracking-wide text-muted-foreground">
+        {/* Label as a mono uppercase eyebrow; the value is a count that
+            changes between fetches, so it gets `tabular` to stop the
+            digits from shifting width as the page refreshes. */}
+        <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-white/40">
           {label}
         </div>
-        <div className="mt-1.5 font-heading text-2xl font-semibold text-foreground">
+        <div className="mt-1.5 font-heading text-2xl font-semibold tabular text-[#edeae0]">
           {value}
         </div>
-        {hint && (
-          <div className="mt-1 text-xs text-muted-foreground">{hint}</div>
-        )}
+        {hint && <div className="mt-1 text-xs text-white/55">{hint}</div>}
       </CardContent>
     </Card>
   );
@@ -143,21 +144,39 @@ export default async function SnapchatPage() {
     ? Math.round((stats.bankRemaining / stats.bankTotal) * 100)
     : 0;
 
+  // Snapchat's brand yellow — kept as the page's identity accent (eyebrow,
+  // icon glow, section rule) because it's meaningful platform identity, not
+  // decoration. Everything else falls back to the shared terracotta tokens.
+  const SNAP = "#FFFC00";
+
   return (
     <AppShell>
-      <div className="mb-6">
+      <div className="mb-8 cc-reveal">
         <Link
           href="/"
-          className="mb-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          className="inline-flex items-center gap-1.5 text-[12px] text-white/55 transition-colors hover:text-white/85"
         >
           <ArrowLeftIcon className="size-3.5" />
-          Back to Overview
+          Back to Command Center
         </Link>
-        <div className="flex items-center gap-3">
+
+        <div className="mt-6 flex items-center gap-3">
           <PlatformIcon platform="snapchat" className="size-8" />
           <div>
-            <h1 className="text-xl font-semibold">Snapchat</h1>
-            <p className="text-sm text-muted-foreground">
+            {/* Eyebrow names the platform in the shared mono voice; we tint
+                it Snapchat-yellow rather than the default terracotta so the
+                page wears its platform identity. */}
+            <div
+              className="cc-eyebrow"
+              style={{ ["--terracotta-hover" as never]: SNAP } as React.CSSProperties}
+            >
+              Snapchat
+            </div>
+            <h1 className="mt-1.5 text-[40px] font-semibold leading-none tracking-[-0.025em] text-[#edeae0]">
+              Spotlight
+              <span style={{ color: SNAP }}>.</span>
+            </h1>
+            <p className="mt-2 text-[13px] text-white/55">
               Tweet-to-Spotlight via Playwright
             </p>
           </div>
@@ -172,7 +191,26 @@ export default async function SnapchatPage() {
           add a CRON_SCHEDULES entry for snapchat and put CronCountdown
           back here. */}
 
-      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+      {/* Section header — mono eyebrow + uppercase tracked head + animated
+          rule, the shared section-rail treatment. Rule is tinted with the
+          Snapchat accent so the divider carries platform identity. */}
+      <div
+        className="mb-4 flex items-center gap-3 cc-reveal"
+        style={{ animationDelay: "0.06s" }}
+      >
+        <span className="text-[13px] font-semibold uppercase tracking-[0.18em] text-[#edeae0]">
+          Pipeline Health
+        </span>
+        <span
+          className="cc-rule"
+          style={{ ["--rule-color" as never]: SNAP } as React.CSSProperties}
+        />
+      </div>
+
+      <div
+        className="mb-4 grid grid-cols-1 gap-3 cc-reveal sm:grid-cols-3"
+        style={{ animationDelay: "0.12s" }}
+      >
         <StatTile
           label="Scheduled · 7d"
           value={stats.scheduled7d.toString()}
@@ -192,23 +230,28 @@ export default async function SnapchatPage() {
 
       {/* Flow notes — kept inline (not its own component) since nothing else
           on the page needs them. Documents the storage_state recovery flow
-          so the operator sees it on the page that surfaces the failure. */}
-      <div className="mb-5 rounded-lg border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-xs text-[var(--overview-fg)]/65">
+          so the operator sees it on the page that surfaces the failure.
+          Promoted to the shared .cc-surface so it reads as the same card
+          family as the home page tiles. */}
+      <div
+        className="cc-surface mb-5 px-4 py-3 text-xs text-white/65 cc-reveal"
+        style={{ animationDelay: "0.18s" }}
+      >
         <div className="flex flex-wrap gap-x-6 gap-y-1.5">
           <span>
-            <span className="text-[var(--overview-fg)]/40">Schedule</span>{" "}
+            <span className="text-white/40">Schedule</span>{" "}
             <span className="font-mono">Hourly · generator :00, publisher :05 (UTC)</span>
           </span>
           <span>
-            <span className="text-[var(--overview-fg)]/40">Source</span>{" "}
+            <span className="text-white/40">Source</span>{" "}
             <span className="font-mono">data/TweetMasterBank.csv</span>
           </span>
           <span>
-            <span className="text-[var(--overview-fg)]/40">Destination</span>{" "}
+            <span className="text-white/40">Destination</span>{" "}
             <span className="font-mono">Snapchat Spotlight (Playwright headless)</span>
           </span>
         </div>
-        <p className="mt-2 text-[var(--overview-fg)]/45">
+        <p className="mt-2 text-white/45">
           Session cookies live in <code className="font-mono">platform_session_state</code> (one row, platform=snapchat).
           If the publisher logs <code className="font-mono">AUTH_EXPIRED</code> on a post, re-run{" "}
           <code className="font-mono">scripts/capture_snapchat_auth.py</code> locally to refresh the row — Snapchat doesn&apos;t expose a token-refresh API,
@@ -216,6 +259,7 @@ export default async function SnapchatPage() {
         </p>
       </div>
 
+      <div className="cc-reveal" style={{ animationDelay: "0.24s" }}>
       <PathwayCard
         title="X Bank Reel → Snapchat Spotlight"
         steps={[
@@ -232,6 +276,7 @@ export default async function SnapchatPage() {
         actions={[{ url: "/api/snapchat-pipeline" }]}
         lastRun={lastRun}
       />
+      </div>
     </AppShell>
   );
 }

@@ -21,19 +21,23 @@ export interface CronRun {
   error_message: string | null;
 }
 
+// Run status as a token-driven pill so this list speaks the same status
+// language as PathwayCard: success → ok (green), failed → warn (red),
+// anything else (running/pending) → idle (neutral). Mono + uppercase so it
+// reads as a status label, not body text.
 function CronStatusBadge({ status }: { status: string }) {
-  if (status === "success") {
-    return (
-      <Badge className="bg-[#8ca082]/15 text-[#8ca082] border-[#8ca082]/25">
-        success
-      </Badge>
-    );
-  }
-  if (status === "failed") {
-    return <Badge variant="destructive">failed</Badge>;
-  }
+  const config =
+    status === "success"
+      ? { bg: "var(--pill-ok-bg)", fg: "var(--pill-ok-fg)" }
+      : status === "failed"
+        ? { bg: "var(--pill-warn-bg)", fg: "var(--pill-warn-fg)" }
+        : { bg: "var(--pill-idle-bg)", fg: "var(--pill-idle-fg)" };
+
   return (
-    <Badge className="bg-[#ae5630]/15 text-[#ae5630] border-[#ae5630]/25">
+    <Badge
+      className="border-transparent font-mono text-[10px] uppercase tracking-[0.12em]"
+      style={{ backgroundColor: config.bg, color: config.fg }}
+    >
       {status}
     </Badge>
   );
@@ -94,18 +98,24 @@ export function PlatformCronSection({
                     key={run.id}
                     className="flex flex-wrap items-center gap-x-3 gap-y-1"
                   >
-                    <span className="text-muted-foreground tabular-nums">
+                    {/* Timestamp, duration, and count are figures that
+                        change run-to-run — mono + tabular keeps them from
+                        jittering as the list updates. */}
+                    <span className="font-mono tabular text-white/45">
                       {new Date(run.started_at).toLocaleString()}
                     </span>
                     <CronStatusBadge status={run.status} />
-                    <span className="text-muted-foreground">
+                    <span className="font-mono tabular text-white/45">
                       {duration !== null ? `${duration}s` : "running…"}
                     </span>
-                    <span className="text-muted-foreground">
+                    <span className="font-mono tabular text-white/45">
                       {run.posts_processed} posts
                     </span>
                     {run.error_message && (
-                      <span className="w-full truncate text-red-500">
+                      <span
+                        className="w-full truncate"
+                        style={{ color: "var(--pill-warn-fg)" }}
+                      >
                         {run.error_message}
                       </span>
                     )}

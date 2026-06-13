@@ -71,15 +71,15 @@ export default async function TweetCardsPage() {
 
   return (
     <AppShell>
-      <div className="mb-6">
+      <div className="mb-8 cc-reveal">
         <Link
           href="/"
-          className="mb-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          className="inline-flex items-center gap-1.5 text-[12px] text-white/55 transition-colors hover:text-white/85"
         >
           <ArrowLeftIcon className="size-3.5" />
-          Back to Overview
+          Back to Command Center
         </Link>
-        <div className="flex items-center gap-3">
+        <div className="mt-6 flex items-center gap-3">
           {/* Three platform icons inline make the multi-platform nature of
               this format obvious at a glance — one icon would have read
               as TikTok-only, which is exactly the misconception the page
@@ -91,8 +91,14 @@ export default async function TweetCardsPage() {
             <PlatformIcon platform="instagram" className="size-7" />
           </div>
           <div>
-            <h1 className="text-xl font-semibold">Tweet Cards</h1>
-            <p className="text-sm text-muted-foreground">
+            {/* Mono eyebrow over the large display title with a terracotta
+                period — the shared page-title language. */}
+            <div className="cc-eyebrow">Multi-Platform Format</div>
+            <h1 className="mt-1.5 text-[40px] font-semibold leading-none tracking-[-0.025em] text-[#edeae0]">
+              Tweet Cards
+              <span style={{ color: "var(--terracotta)" }}>.</span>
+            </h1>
+            <p className="mt-2 text-[13px] text-white/55">
               Turn viral tweets into multi-platform quote cards
             </p>
           </div>
@@ -101,23 +107,27 @@ export default async function TweetCardsPage() {
 
       {/* Run cadence + dedup notes — kept inline (not split into its own
           component) because nothing else on the page needs them, and copy-
-          worth of context belongs alongside the pathways it describes. */}
-      <div className="mb-5 rounded-lg border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-xs text-[var(--overview-fg)]/65">
+          worth of context belongs alongside the pathways it describes.
+          Promoted to the shared .cc-surface card family. */}
+      <div
+        className="cc-surface mb-5 px-4 py-3 text-xs text-white/65 cc-reveal"
+        style={{ animationDelay: "0.06s" }}
+      >
         <div className="flex flex-wrap gap-x-6 gap-y-1.5">
           <span>
-            <span className="text-[var(--overview-fg)]/40">Schedule</span>{" "}
+            <span className="text-white/40">Schedule</span>{" "}
             <span className="font-mono">Daily · 11:00 / 11:15 UTC (4:00 AM PDT)</span>
           </span>
           <span>
-            <span className="text-[var(--overview-fg)]/40">Source</span>{" "}
+            <span className="text-white/40">Source</span>{" "}
             <span className="font-mono">@AlexHormozi via Apify + data/TweetMasterBank.csv</span>
           </span>
           <span>
-            <span className="text-[var(--overview-fg)]/40">Channels</span>{" "}
+            <span className="text-white/40">Channels</span>{" "}
             <span className="font-mono">Buffer · TikTok + Facebook + LinkedIn + Instagram</span>
           </span>
         </div>
-        <p className="mt-2 text-[var(--overview-fg)]/45">
+        <p className="mt-2 text-white/45">
           Per-platform dedup against the <code className="font-mono">posts</code> table —
           each leg (TikTok, Facebook, LinkedIn, Instagram) skips independently. One cron run renders the
           three variants in-process via <code className="font-mono">/api/content-gen/generate</code>;
@@ -126,6 +136,7 @@ export default async function TweetCardsPage() {
         </p>
       </div>
 
+      <div className="cc-reveal" style={{ animationDelay: "0.12s" }}>
       <PathwayCard
         number={1}
         title="X Outlier Reel"
@@ -138,7 +149,9 @@ export default async function TweetCardsPage() {
         actions={[{ url: "/api/cron/run", body: { job: "tiktok-pipeline" } }]}
         lastRun={outlierLast}
       />
+      </div>
 
+      <div className="cc-reveal" style={{ animationDelay: "0.18s" }}>
       <PathwayCard
         number={2}
         title="X Bank Reel"
@@ -151,6 +164,7 @@ export default async function TweetCardsPage() {
         actions={[{ url: "/api/cron/run", body: { job: "tiktok-bank-pipeline" } }]}
         lastRun={bankLast}
       />
+      </div>
     </AppShell>
   );
 }

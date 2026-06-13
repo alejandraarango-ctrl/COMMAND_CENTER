@@ -3,35 +3,22 @@
  * (small colored rail + label + count) above a responsive grid of
  * FormatCards.
  *
- * Grid (flat mode): `repeat(auto-fit, minmax(280px, 1fr))`. The 280px
- * floor is tuned to the page's 1100px max-width container (1052px of
- * content after horizontal padding): three 280px tracks + two 12px gaps
- * = 864px fits comfortably, but a fourth track would need 1156px and
- * cannot fit, so cards wrap to a second row at 4+ items. Narrower
- * viewports collapse further (3 → 2 → 1) via auto-fit. `auto-fit` also
- * makes single-card categories stretch to fill the row instead of
- * sitting at 280px on the left with empty space — verifies in the Mid
- * section, which currently has one card.
+ * Grid: `repeat(auto-fill, minmax(300px, 1fr))` with a 14px gap — the
+ * exact layout of the refined-terracotta mock. The 300px floor against
+ * the 1100px max-width container yields three tracks before wrapping.
+ * `auto-fill` (not `auto-fit`) keeps a lone card left-aligned at ~300px
+ * instead of stretching across the row — see the Mid section's single
+ * Scheduling card.
  *
- * Subgrouped mode: when a category contains formats tagged with 2+
- * distinct `subgroup` values (today only Alex's Short, split into
- * Creation vs Distribution), we render one grid with full-width sub-
- * headers between groups. The grid uses `auto-fill` instead of
- * `auto-fit` so empty tracks are preserved — that keeps cards aligned
- * column-wise across both sub-groups (otherwise the 2 Creation cards
- * would stretch wider than the 3 Distribution cards, since `auto-fit`
- * collapses unused tracks). Headers span all columns via
- * `grid-column: 1 / -1`, forcing the next set of cards onto a fresh
- * row.
+ * Note: the data model still carries an optional `subgroup` field on
+ * formats (Creation/Distribution), but the section no longer renders
+ * sub-headers for it — every category is a single flat grid to match the
+ * mock. The field is left in place rather than removed prematurely.
  */
-import { Fragment } from "react";
 import { FormatCard } from "./format-card";
 import {
-  SUBGROUP_LABELS,
-  SUBGROUP_ORDER,
   type Format,
   type FormatHealth,
-  type FormatSubgroup,
 } from "@/lib/command-center-config";
 
 interface CategorySectionProps {
@@ -58,92 +45,50 @@ export function CategorySection({
 }: CategorySectionProps) {
   const count = formats.length;
 
-  // Determine which subgroups (if any) are populated in this category.
-  // We only switch to the subgrouped layout when 2+ subgroups are
-  // present — a single subgroup with one card (e.g. Leila's Short, if
-  // only one of her formats was tagged) would render the same as flat,
-  // so we skip the sub-header noise in that case.
-  const subgroupsPresent: FormatSubgroup[] = SUBGROUP_ORDER.filter((sg) =>
-    formats.some((f) => f.subgroup === sg),
-  );
-  const useSubgroups = subgroupsPresent.length >= 2;
-
   return (
     <section>
-      <div className="mb-4 flex items-center gap-3">
-        {/* 3px × 14px colored rail — flush left of the label. */}
+      <div className="mb-5 flex items-center gap-3.5">
+        {/* Category label in its identity color, followed by an animated
+            sweep rule (.cc-rule) tinted to the same color — signals the
+            section is live without a heavy header. */}
         <span
-          aria-hidden
-          className="h-[14px] w-[3px] rounded-sm"
-          style={{ backgroundColor: color }}
-        />
-        <span
-          className="text-[14px] font-medium"
+          className="text-[13px] font-bold uppercase tracking-[0.2em]"
           style={{ color }}
         >
           {label}
         </span>
-        <span className="text-[12px] text-white/40">
+        <span
+          className="cc-rule"
+          style={{ ["--rule-color" as never]: color } as React.CSSProperties}
+          aria-hidden
+        />
+        <span className="font-mono text-[11px] tracking-[0.08em] text-white/40">
           {count} {count === 1 ? "format" : "formats"}
         </span>
       </div>
 
-      {useSubgroups ? (
-        <div
-          className="grid gap-3"
-          style={{
-            // auto-fill (not auto-fit) so the empty 3rd track in the
-            // Creation row stays as a placeholder — keeps card widths
-            // identical across both sub-rows.
-            gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-          }}
-        >
-          {subgroupsPresent.map((sg, idx) => {
-            const items = formats.filter((f) => f.subgroup === sg);
-            return (
-              <Fragment key={sg}>
-                <div
-                  // Faint section divider — minor type, tight tracking,
-                  // muted color so the Category band reads as primary
-                  // and these read as secondary structure. `mt-2` on
-                  // every header except the first creates breathing
-                  // room between sub-groups without doubling the gap.
-                  className={`text-[10px] font-medium uppercase tracking-[0.2em] text-white/35 ${
-                    idx > 0 ? "mt-2" : ""
-                  }`}
-                  style={{ gridColumn: "1 / -1" }}
-                >
-                  {SUBGROUP_LABELS[sg]}
-                </div>
-                {items.map((f) => (
-                  <FormatCard
-                    key={f.id}
-                    format={f}
-                    color={color}
-                    health={healthMap.get(f.id) ?? DEFAULT_HEALTH}
-                  />
-                ))}
-              </Fragment>
-            );
-          })}
-        </div>
-      ) : (
-        <div
-          className="grid gap-3"
-          style={{
-            gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-          }}
-        >
-          {formats.map((f) => (
-            <FormatCard
-              key={f.id}
-              format={f}
-              color={color}
-              health={healthMap.get(f.id) ?? DEFAULT_HEALTH}
-            />
-          ))}
-        </div>
-      )}
+      {/* One flat responsive grid per category — matches the mock. The
+          Creation/Distribution subgroup sub-headers were removed so SHORT
+          reads as a single grid like every other category. `auto-fill`
+          with a 300px floor keeps a lone card (e.g. Mid → Scheduling)
+          left-aligned at its natural width rather than stretching across
+          the row. */}
+      <div
+        className="grid"
+        style={{
+          gap: "14px",
+          gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
+        }}
+      >
+        {formats.map((f) => (
+          <FormatCard
+            key={f.id}
+            format={f}
+            color={color}
+            health={healthMap.get(f.id) ?? DEFAULT_HEALTH}
+          />
+        ))}
+      </div>
     </section>
   );
 }

@@ -87,59 +87,62 @@ export default async function ThreadsPage({
 
   return (
     <AppShell>
-      <div className="mb-6">
+      <div className="mb-8 cc-reveal">
         <Link
           href="/"
-          className="mb-4 inline-flex items-center gap-1.5 text-[12px] text-white/55 transition-colors hover:text-white/85"
+          className="inline-flex items-center gap-1.5 text-[12px] text-white/55 transition-colors hover:text-white/85"
         >
           <ArrowLeftIcon className="size-3.5" />
           Back to Command Center
         </Link>
 
         {isFiltered ? (
-          // Command Center-style header: a 3px color rail flush against the
-          // title (same primitive used in CategorySection on the home page),
-          // followed by the format name in the category color and a muted
-          // subtitle below. Matches the visual rhythm of the home page so
-          // navigating between / and the detail view feels continuous.
-          <div className="flex items-start gap-3">
-            <span
-              aria-hidden
-              className="mt-2 h-[18px] w-[3px] rounded-sm"
-              style={{ backgroundColor: writtenColor }}
-            />
-            <div>
-              <h1
-                className="text-[22px] font-medium leading-tight tracking-tight"
-                style={{ color: writtenColor }}
-              >
-                {formatTitle}
-              </h1>
-              <p className="mt-1 text-[12px] text-white/55">{formatSubtitle}</p>
+          // Command Center-style header: the format name carried in the
+          // Written category color so navigating between / and this filtered
+          // view feels continuous. Upgraded to the shared eyebrow + large
+          // display title language; the eyebrow's accent is tinted with the
+          // category color rather than the default terracotta.
+          <div className="mt-6">
+            <div
+              className="cc-eyebrow"
+              style={
+                { ["--terracotta-hover" as never]: writtenColor } as React.CSSProperties
+              }
+            >
+              Written · Threads
             </div>
+            <h1
+              className="mt-1.5 text-[40px] font-semibold leading-none tracking-[-0.025em]"
+              style={{ color: writtenColor }}
+            >
+              {formatTitle}
+            </h1>
+            <p className="mt-2 text-[13px] text-white/55">{formatSubtitle}</p>
           </div>
         ) : (
           // Unfiltered legacy header — kept for direct /threads visits so
-          // platform-centric navigation still makes sense.
-          <div className="flex items-center gap-3">
+          // platform-centric navigation still makes sense. Same eyebrow +
+          // display-title treatment, terracotta period.
+          <div className="mt-6 flex items-center gap-3">
             <PlatformIcon platform="threads" className="size-8" />
             <div>
-              <h1 className="text-xl font-semibold">{formatTitle}</h1>
-              <p className="text-sm text-muted-foreground">{formatSubtitle}</p>
+              <div className="cc-eyebrow">Platform</div>
+              <h1 className="mt-1.5 text-[40px] font-semibold leading-none tracking-[-0.025em] text-[#edeae0]">
+                {formatTitle}
+                <span style={{ color: "var(--terracotta)" }}>.</span>
+              </h1>
+              <p className="mt-2 text-[13px] text-white/55">{formatSubtitle}</p>
             </div>
           </div>
         )}
       </div>
 
-      {/* Context band — schedule/account/channel + dedup notes. Restyled
-          with the warm Command Center card surface (#161513-ish bg, thin
-          border) so it reads as the same family as the home page tiles. */}
+      {/* Context band — schedule/account/channel + dedup notes. Promoted to
+          the shared .cc-surface card family so it reads as the same surface
+          as the home page tiles instead of a one-off hand-rolled box. */}
       <div
-        className="mb-5 rounded-xl px-4 py-3 text-[12px] text-[var(--overview-fg)]/70"
-        style={{
-          backgroundColor: "#161513",
-          border: "0.5px solid rgba(255,255,255,0.06)",
-        }}
+        className="cc-surface mb-5 px-4 py-3 text-[12px] text-white/70 cc-reveal"
+        style={{ animationDelay: "0.06s" }}
       >
         <div className="flex flex-wrap gap-x-6 gap-y-1.5">
           <span>
@@ -165,6 +168,7 @@ export default async function ThreadsPage({
       </div>
 
       {showCrosspost && (
+        <div className="cc-reveal" style={{ animationDelay: "0.12s" }}>
         <PathwayCard
           // Hide the "Pathway 1" badge when this is the only card on the
           // page — the badge is only meaningful when there's also a Pathway 2
@@ -182,9 +186,11 @@ export default async function ThreadsPage({
           ]}
           lastRun={apifyLast}
         />
+        </div>
       )}
 
       {showBank && (
+        <div className="cc-reveal" style={{ animationDelay: "0.18s" }}>
         <PathwayCard
           number={isFiltered ? undefined : 2}
           title="X Bank-Post"
@@ -199,6 +205,7 @@ export default async function ThreadsPage({
           ]}
           lastRun={bankLast}
         />
+        </div>
       )}
     </AppShell>
   );

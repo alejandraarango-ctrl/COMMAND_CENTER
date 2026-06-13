@@ -2,8 +2,10 @@ import { FaYoutube, FaInstagram, FaTiktok, FaLinkedinIn, FaFacebookF, FaThreads,
 
 /* Single-accent rule: every platform icon renders in terracotta so the
    dashboard reads as one coherent surface instead of a rainbow of brand
-   hexes. Platform identity is carried by the logo shape, not its color. */
-const ACCENT = "text-[#ae5630]";
+   hexes. Platform identity is carried by the logo shape, not its color.
+   Drives off the --terracotta design token (not a raw hex) so the whole
+   set shifts in lockstep if the accent is ever retuned. */
+const ACCENT = "text-[var(--terracotta)]";
 
 const PLATFORM_ICONS: Record<string, { icon: React.ComponentType<{ className?: string }>; color: string }> = {
   youtube: { icon: FaYoutube, color: ACCENT },

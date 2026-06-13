@@ -73,45 +73,47 @@ export default async function DashboardHome({ searchParams }: DashboardHomeProps
 
   const active = CATEGORY_ORDER.filter((c) => byCategory[c].length > 0);
   const empty = CATEGORY_ORDER.filter((c) => byCategory[c].length === 0);
-  const populated = new Set(active);
   const liveCount = visibleFormats.filter((f) => f.status === "live").length;
   const pausedCount = visibleFormats.length - liveCount;
 
   return (
-    <div
-      className="relative min-h-screen"
-      style={{
-        color: "var(--foreground)",
-        backgroundColor: "var(--background)",
-      }}
-    >
-      <div className="mx-auto max-w-[1100px] px-6 py-10">
-        <PageHeader
-          liveCount={liveCount}
-          pausedCount={pausedCount}
-          populatedCategories={populated}
-        />
+    // No opaque background here — the global .app-atmosphere (warm radial +
+    // grain, see layout.tsx) shows through so the home page shares the same
+    // ambient surface as every other route. Container width + paddings match
+    // the refined-terracotta mock (max-w 1100, ~56px top padding).
+    <div className="relative min-h-screen" style={{ color: "var(--foreground)" }}>
+      <div className="mx-auto max-w-[1100px] px-7 pb-24 pt-14">
+        <div className="cc-reveal">
+          <PageHeader liveCount={liveCount} pausedCount={pausedCount} />
+        </div>
 
         {/* Creator toggle sits directly below the header so it reads as a
             page-level navigator rather than a per-section control. */}
-        <div className="mt-5">
+        <div className="cc-reveal mt-[34px]" style={{ animationDelay: "0.06s" }}>
           <CreatorToggle current={creator} />
         </div>
 
-        <div className="mt-10 space-y-10">
-          {active.map((c) => (
-            <CategorySection
+        <div className="mt-[52px] space-y-[52px]">
+          {active.map((c, i) => (
+            <div
               key={c}
-              label={CATEGORY_LABELS[c]}
-              color={CATEGORY_COLORS[c]}
-              formats={byCategory[c]}
-              healthMap={healthMap}
-            />
+              className="cc-reveal"
+              // Stagger each category section in after the header so the
+              // page assembles top-to-bottom rather than all at once.
+              style={{ animationDelay: `${0.12 + i * 0.07}s` }}
+            >
+              <CategorySection
+                label={CATEGORY_LABELS[c]}
+                color={CATEGORY_COLORS[c]}
+                formats={byCategory[c]}
+                healthMap={healthMap}
+              />
+            </div>
           ))}
         </div>
 
         {empty.length > 0 && (
-          <div className="mt-10 space-y-2">
+          <div className="mt-[34px] space-y-2.5">
             {empty.map((c) => (
               <EmptyCategoryBand
                 key={c}

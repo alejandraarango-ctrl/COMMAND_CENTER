@@ -104,15 +104,16 @@ function StatTile({
   return (
     <Card size="sm">
       <CardContent>
-        <div className="text-xs uppercase tracking-wide text-muted-foreground">
+        {/* Label as a mono uppercase eyebrow; the value is a count that
+            changes between fetches, so it gets `tabular` to stop the
+            digits from shifting width as the page refreshes. */}
+        <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-white/40">
           {label}
         </div>
-        <div className="mt-1.5 font-heading text-2xl font-semibold text-foreground">
+        <div className="mt-1.5 font-heading text-2xl font-semibold tabular text-[#edeae0]">
           {value}
         </div>
-        {hint && (
-          <div className="mt-1 text-xs text-muted-foreground">{hint}</div>
-        )}
+        {hint && <div className="mt-1 text-xs text-white/55">{hint}</div>}
       </CardContent>
     </Card>
   );
@@ -127,30 +128,54 @@ export default async function InstagramSecondPage() {
 
   return (
     <AppShell>
-      <div className="mb-6">
+      <div className="mb-8 cc-reveal">
         <Link
           href="/"
-          className="mb-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          className="inline-flex items-center gap-1.5 text-[12px] text-white/55 transition-colors hover:text-white/85"
         >
           <ArrowLeftIcon className="size-3.5" />
-          Back to Overview
+          Back to Command Center
         </Link>
-        <div className="flex items-center gap-3">
+
+        <div className="mt-6 flex items-center gap-3">
           <PlatformIcon platform="instagram_2nd" className="size-8" />
           <div>
-            <h1 className="text-xl font-semibold">Instagram (2nd)</h1>
-            <p className="text-sm text-muted-foreground">
+            {/* Mono eyebrow over a large display title with a terracotta
+                period — the shared page-title language. */}
+            <div className="cc-eyebrow">Instagram · 2nd</div>
+            <h1 className="mt-1.5 text-[40px] font-semibold leading-none tracking-[-0.025em] text-[#edeae0]">
+              Tweet Reels
+              <span style={{ color: "var(--terracotta)" }}>.</span>
+            </h1>
+            <p className="mt-2 text-[13px] text-white/55">
               Tweet-to-Instagram pipeline
             </p>
           </div>
         </div>
       </div>
 
-      <div className="mb-4">
+      <div className="mb-4 cc-reveal" style={{ animationDelay: "0.06s" }}>
         <CronCountdown platform="instagram_2nd" />
       </div>
 
-      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+      {/* Section header — mono eyebrow voice + animated terracotta rule. */}
+      <div
+        className="mb-4 flex items-center gap-3 cc-reveal"
+        style={{ animationDelay: "0.12s" }}
+      >
+        <span className="text-[13px] font-semibold uppercase tracking-[0.18em] text-[#edeae0]">
+          Pipeline Health
+        </span>
+        <span
+          className="cc-rule"
+          style={{ ["--rule-color" as never]: "var(--terracotta)" } as React.CSSProperties}
+        />
+      </div>
+
+      <div
+        className="mb-4 grid grid-cols-1 gap-3 cc-reveal sm:grid-cols-3"
+        style={{ animationDelay: "0.18s" }}
+      >
         <StatTile
           label="Scheduled · 7d"
           value={stats.scheduled7d.toString()}
@@ -169,29 +194,34 @@ export default async function InstagramSecondPage() {
       </div>
 
       {/* Run cadence + flow notes — kept inline (not split into its own
-          component) because nothing else on the page needs them. */}
-      <div className="mb-5 rounded-lg border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-xs text-[var(--overview-fg)]/65">
+          component) because nothing else on the page needs them. Promoted
+          to the shared .cc-surface card family. */}
+      <div
+        className="cc-surface mb-5 px-4 py-3 text-xs text-white/65 cc-reveal"
+        style={{ animationDelay: "0.24s" }}
+      >
         <div className="flex flex-wrap gap-x-6 gap-y-1.5">
           <span>
-            <span className="text-[var(--overview-fg)]/40">Schedule</span>{" "}
+            <span className="text-white/40">Schedule</span>{" "}
             <span className="font-mono">Paused — manual via workflow_dispatch</span>
           </span>
           <span>
-            <span className="text-[var(--overview-fg)]/40">Source</span>{" "}
+            <span className="text-white/40">Source</span>{" "}
             <span className="font-mono">data/TweetMasterBank.csv</span>
           </span>
           <span>
-            <span className="text-[var(--overview-fg)]/40">Channel</span>{" "}
+            <span className="text-white/40">Channel</span>{" "}
             <span className="font-mono">Buffer · Instagram (alexhighlights2026)</span>
           </span>
         </div>
-        <p className="mt-2 text-[var(--overview-fg)]/45">
+        <p className="mt-2 text-white/45">
           GitHub Actions schedule is commented out (<code className="font-mono">.github/workflows/ig-pipeline.yml</code>);
           the dashboard <code className="font-mono">/api/ig-pipeline</code> route orchestrates pick → generate → schedule in-process on manual trigger.
           Per-item commit (marks each tweet used right after Buffer accepts) so a mid-batch failure can&apos;t cause reposts.
         </p>
       </div>
 
+      <div className="cc-reveal" style={{ animationDelay: "0.3s" }}>
       <PathwayCard
         number={1}
         title="X Bank Reel (paused — manual)"
@@ -209,6 +239,7 @@ export default async function InstagramSecondPage() {
         actions={[{ url: "/api/ig-pipeline" }]}
         lastRun={lastRun}
       />
+      </div>
     </AppShell>
   );
 }

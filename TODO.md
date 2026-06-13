@@ -1,7 +1,5 @@
 # TODO
  
-- Highlights channel - RAG title generation
-
 - TikTok Carousels with tweets automation
 
 - Create ongonig tweet supabase -> with tweets being added to it daily -> then automation can just pull fromt he database with one automation
@@ -10,16 +8,9 @@
 
 - [ ] YT long form video editor - adds CTA (pre edited) + banner 
 
-- [ ] IG way to trim down hotlines / Q&As - cut each CAM to each individual biz owner. Directly ffmpeg input and output mp4. And then later down the line use remotion to splice both together 
+- [ ] IG way to trim down hotlines / Q&As - cut each CAM to each individual biz owner. Directly ffmpeg input and output mp4. And then later down the line use remotion tob   splice both together 
 - Then subset of that is be able to screen for clips that are high TAM and select them out (and clipper would produce descript cut)
 - Down the line captions on Q&A content 
-
-- [ ] Add data insights tracker from Buffer
-
- [ ] Instagram repost automation (download via scraper)
-  - Scraper -> Topaz + Audio podcast -> Buffer
-
-- [ ] YouTube podcasts? cross post via API? (need to edit)
 
 - ACQ MCP + cron job
 

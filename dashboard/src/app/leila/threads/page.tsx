@@ -53,19 +53,26 @@ export default async function LeilaThreadsPage() {
 
   return (
     <AppShell>
-      <div className="mb-6">
+      {/* Page header — mono eyebrow over a large tracked title with a
+          terracotta period, staggered into view. Mirrors the LinkedIn
+          pathway page so both Leila detail pages read as siblings. */}
+      <div className="cc-reveal mb-8" style={{ animationDelay: "0s" }}>
         <Link
           href="/"
-          className="mb-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          className="mb-5 inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-white/40 transition-colors hover:text-white/70"
         >
           <ArrowLeftIcon className="size-3.5" />
           Back to Overview
         </Link>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3.5">
           <PlatformIcon platform="threads" className="size-8" />
           <div>
-            <h1 className="text-xl font-semibold">Leila — Threads</h1>
-            <p className="text-sm text-muted-foreground">
+            <div className="cc-eyebrow mb-1.5">Leila Pathway</div>
+            <h1 className="text-[40px] font-semibold leading-none tracking-[-0.025em] text-[#edeae0]">
+              Threads
+              <span style={{ color: "var(--terracotta)" }}>.</span>
+            </h1>
+            <p className="mt-2 text-sm text-white/55">
               Verbatim repost of recent @LeilaHormozi tweets
             </p>
           </div>
@@ -73,40 +80,55 @@ export default async function LeilaThreadsPage() {
       </div>
 
       {/* Run cadence + dedup notes — kept inline (not split into its own
-          component) because nothing else on the page needs them. */}
-      <div className="mb-5 rounded-lg border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-xs text-[var(--overview-fg)]/65">
+          component) because nothing else on the page needs them. Now a
+          cc-surface so it shares the elevated card language. */}
+      <div
+        className="cc-reveal cc-surface mb-5 px-5 py-4 text-xs text-white/65"
+        style={{ animationDelay: "0.06s" }}
+      >
         <div className="flex flex-wrap gap-x-6 gap-y-1.5">
           <span>
-            <span className="text-[var(--overview-fg)]/40">Schedule</span>{" "}
-            <span className="font-mono">Daily · 11:00 UTC (4:00 AM PDT)</span>
+            <span className="font-mono uppercase tracking-[0.14em] text-white/40">
+              Schedule
+            </span>{" "}
+            <span className="font-mono tabular">Daily · 11:00 UTC (4:00 AM PDT)</span>
           </span>
           <span>
-            <span className="text-[var(--overview-fg)]/40">Source</span>{" "}
+            <span className="font-mono uppercase tracking-[0.14em] text-white/40">
+              Source
+            </span>{" "}
             <span className="font-mono">@LeilaHormozi via Apify</span>
           </span>
           <span>
-            <span className="text-[var(--overview-fg)]/40">Channel</span>{" "}
+            <span className="font-mono uppercase tracking-[0.14em] text-white/40">
+              Channel
+            </span>{" "}
             <span className="font-mono">Buffer · Threads (Leila)</span>
           </span>
         </div>
-        <p className="mt-2 text-[var(--overview-fg)]/45">
+        <p className="mt-2.5 text-white/45">
           Single-pathway pipeline — Apify-only, no content bank. Dedup by caption against{" "}
           <code className="font-mono">threads_leila</code> posts. Tweets containing hyperlinks are filtered out before insert.
         </p>
       </div>
 
-      <PathwayCard
-        number={1}
-        title="X Cross-Post"
-        steps={[
-          "Scrape up to 5 recent @LeilaHormozi tweets from the past 24h via Apify (no engagement filter)",
-          "Skip tweets containing hyperlinks (cron-side filter, not on the X side)",
-          "Skip any whose source tweet text already exists in threads_leila posts (dedup)",
-          "Queue verbatim to Buffer's Leila Threads channel",
-        ]}
-        actions={[{ url: "/api/cron/run", body: { job: "threads-leila-cron" } }]}
-        lastRun={lastRun}
-      />
+      {/* PathwayCard is a shared command-center component (already styled in
+          the refined terracotta language); wrapped in a reveal so it joins
+          the staggered entrance. */}
+      <div className="cc-reveal" style={{ animationDelay: "0.12s" }}>
+        <PathwayCard
+          number={1}
+          title="X Cross-Post"
+          steps={[
+            "Scrape up to 5 recent @LeilaHormozi tweets from the past 24h via Apify (no engagement filter)",
+            "Skip tweets containing hyperlinks (cron-side filter, not on the X side)",
+            "Skip any whose source tweet text already exists in threads_leila posts (dedup)",
+            "Queue verbatim to Buffer's Leila Threads channel",
+          ]}
+          actions={[{ url: "/api/cron/run", body: { job: "threads-leila-cron" } }]}
+          lastRun={lastRun}
+        />
+      </div>
     </AppShell>
   );
 }

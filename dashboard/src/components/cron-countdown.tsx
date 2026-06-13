@@ -61,10 +61,13 @@ export function CronCountdown({ platform }: { platform: string }) {
       <span className="text-muted-foreground">
         Next run: {config.description}, in{" "}
       </span>
+      {/* Mono + tabular so the ticking digits don't jitter as they update,
+          and the figure reads as a live count. Under 1h warms to the
+          terracotta accent (token, not a raw hex) to signal "soon". */}
       <span
         className={cn(
-          "font-medium tabular-nums",
-          urgent ? "text-[#ae5630]" : "text-foreground"
+          "font-mono font-medium tabular",
+          urgent ? "text-[var(--terracotta)]" : "text-foreground"
         )}
       >
         {h}h {m}m

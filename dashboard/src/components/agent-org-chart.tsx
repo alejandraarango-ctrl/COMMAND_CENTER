@@ -151,10 +151,13 @@ function StatusDot({ status }: { status: AgentStatus }) {
   return (
     <Tooltip>
       <TooltipTrigger>
+        {/* Status dot driven by the design-system pill palette so the
+            three states read with the same green / terracotta / neutral
+            vocabulary used everywhere else (instead of one-off hexes). */}
         <span
           className={cn("inline-block size-2 rounded-full", {
-            "bg-[#8ca082]": status === "active",
-            "bg-[#ae5630]": status === "planned",
+            "bg-[var(--pill-ok-fg)]": status === "active",
+            "bg-[var(--terracotta)]": status === "planned",
             "bg-white/[0.15]": status === "placeholder",
           })}
         />
@@ -171,8 +174,13 @@ function StatusDot({ status }: { status: AgentStatus }) {
 /* ─── Tree connector line (vertical) ────────────────────────────────── */
 
 function ConnectorLine({ className }: { className?: string }) {
+  // Tree connectors use the shared warm hairline token so the org-chart
+  // lines match every other divider on the page (was a bare white alpha).
   return (
-    <div className={cn("mx-auto w-px h-6 bg-white/[0.10]", className)} />
+    <div
+      className={cn("mx-auto w-px h-6", className)}
+      style={{ backgroundColor: "var(--surface-border)" }}
+    />
   );
 }
 
@@ -191,7 +199,10 @@ function PlatformColumn({ data }: { data: PlatformAgents }) {
         whileTap={{ scale: 0.98 }}
         className="w-full"
       >
-        <Card className="cursor-pointer hover:ring-[#ae5630]/40 transition-shadow">
+        {/* Platform header card. Keeps the shadcn <Card> (already a warm
+            top-lit gradient) and warms its ring to terracotta on hover so
+            the affordance matches the system accent. */}
+        <Card className="cursor-pointer transition-shadow hover:ring-[color:var(--terracotta)]/45">
           <CardHeader className="pb-0">
             <div className="flex items-center gap-2">
               <Avatar size="sm">
@@ -204,12 +215,15 @@ function PlatformColumn({ data }: { data: PlatformAgents }) {
           </CardHeader>
           <CardContent>
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">
+              {/* Count in mono so the numeral reads as a metric, not prose. */}
+              <span className="font-mono text-xs text-white/55 tabular">
                 {data.agents.length} agents
               </span>
               <div className="flex items-center gap-1.5">
                 {activeCount > 0 && (
-                  <Badge className="bg-[#8ca082]/15 text-[#8ca082] border-[#8ca082]/25 text-[10px] px-1.5">
+                  // "N live" pill on the system OK palette (green) — the
+                  // same green used by status dots and pills elsewhere.
+                  <Badge className="border-0 bg-[var(--pill-ok-bg)] text-[var(--pill-ok-fg)] font-mono text-[10px] px-1.5 tabular">
                     {activeCount} live
                   </Badge>
                 )}
@@ -217,7 +231,7 @@ function PlatformColumn({ data }: { data: PlatformAgents }) {
                   animate={{ rotate: expanded ? 180 : 0 }}
                   transition={{ duration: 0.2 }}
                 >
-                  <ChevronDownIcon className="size-3.5 text-muted-foreground" />
+                  <ChevronDownIcon className="size-3.5 text-white/55" />
                 </motion.span>
               </div>
             </div>
@@ -246,17 +260,20 @@ function PlatformColumn({ data }: { data: PlatformAgents }) {
                 >
                   <Tooltip>
                     <TooltipTrigger className="w-full text-left">
-                      <Card size="sm" className="bg-black/30">
-                        <CardContent className="py-2 px-3">
-                          <div className="flex items-center gap-2">
-                            <agent.icon className="size-3.5 text-muted-foreground shrink-0" />
-                            <span className="text-xs font-medium truncate">
-                              {agent.name}
-                            </span>
-                            <StatusDot status={agent.status} />
-                          </div>
-                        </CardContent>
-                      </Card>
+                      {/* Individual agent rows use the shared .cc-surface
+                          card chrome with the interactive hover-lift + a
+                          terracotta accent rail (was a flat black/30 fill),
+                          so each agent reads as a tappable tile in the
+                          system's language. */}
+                      <div className="cc-surface cc-surface--interactive px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <agent.icon className="size-3.5 text-white/55 shrink-0" />
+                          <span className="text-xs font-medium truncate text-[#edeae0]">
+                            {agent.name}
+                          </span>
+                          <StatusDot status={agent.status} />
+                        </div>
+                      </div>
                     </TooltipTrigger>
                     <TooltipContent side="right">
                       {agent.description}
@@ -277,15 +294,16 @@ function PlatformColumn({ data }: { data: PlatformAgents }) {
 export function AgentOrgChart() {
   return (
     <div className="space-y-8">
-      {/* Legend */}
-      <div className="flex items-center gap-4 text-xs text-muted-foreground">
-        <span className="font-medium text-foreground">Status:</span>
+      {/* Legend — mono tracked labels + dots on the system status palette
+          (green / terracotta / neutral), matching StatusDot above. */}
+      <div className="flex items-center gap-4 font-mono text-[11px] tracking-[0.04em] text-white/55">
+        <span className="uppercase tracking-[0.18em] text-white/40">Status</span>
         <span className="flex items-center gap-1.5">
-          <span className="inline-block size-2 rounded-full bg-[#8ca082]" />
+          <span className="inline-block size-2 rounded-full bg-[var(--pill-ok-fg)]" />
           Active
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="inline-block size-2 rounded-full bg-[#ae5630]" />
+          <span className="inline-block size-2 rounded-full bg-[var(--terracotta)]" />
           Planned
         </span>
         <span className="flex items-center gap-1.5">
@@ -302,11 +320,17 @@ export function AgentOrgChart() {
           transition={{ duration: 0.4 }}
           className="w-full max-w-md"
         >
-          <Card className="ring-[#ae5630]/30">
+          {/* Root orchestrator — the one node that owns the terracotta
+              accent (the icon tile + a soft terracotta glow ring) since it
+              sits at the top of the tree. */}
+          <Card
+            className="ring-[color:var(--terracotta)]/35"
+            style={{ boxShadow: "var(--glow-terra)" }}
+          >
             <CardHeader>
               <div className="flex items-center gap-3">
-                <div className="flex items-center justify-center size-10 rounded-lg bg-[#ae5630]/15">
-                  <BotIcon className="size-5 text-[#ae5630]" />
+                <div className="flex items-center justify-center size-10 rounded-lg bg-[var(--terracotta-soft)]">
+                  <BotIcon className="size-5 text-[var(--terracotta)]" />
                 </div>
                 <div>
                   <CardTitle>Command Center Orchestrator</CardTitle>
@@ -319,12 +343,20 @@ export function AgentOrgChart() {
           </Card>
         </motion.div>
 
-        {/* Vertical connector */}
-        <div className="w-px h-8 bg-white/[0.10]" />
-
-        {/* Horizontal connector bar to platforms */}
-        <div className="w-full h-px bg-white/[0.10]" />
-        <div className="w-px h-4 bg-white/[0.10]" />
+        {/* Tree connectors — vertical drop, horizontal bar, short stub —
+            all on the shared warm hairline token. */}
+        <div
+          className="w-px h-8"
+          style={{ backgroundColor: "var(--surface-border)" }}
+        />
+        <div
+          className="w-full h-px"
+          style={{ backgroundColor: "var(--surface-border)" }}
+        />
+        <div
+          className="w-px h-4"
+          style={{ backgroundColor: "var(--surface-border)" }}
+        />
       </div>
 
       {/* ── Platform agents ─────────────────────────────────────── */}
@@ -333,8 +365,13 @@ export function AgentOrgChart() {
         animate={{ opacity: 1 }}
         transition={{ delay: 0.2, duration: 0.4 }}
       >
-        <h3 className="text-sm font-medium text-muted-foreground mb-4">
-          Platform Agents — click to expand
+        {/* Section heading — system voice: 13px semibold uppercase with
+            wide tracking. */}
+        <h3 className="text-[13px] font-semibold uppercase tracking-[0.18em] text-white/55 mb-4">
+          Platform agents
+          <span className="ml-2 font-mono text-[11px] normal-case tracking-normal text-white/35">
+            click to expand
+          </span>
         </h3>
 
         {/* Active platforms */}
@@ -352,7 +389,9 @@ export function AgentOrgChart() {
         </div>
 
         {/* Inactive platforms — greyed out */}
-        <h4 className="text-xs font-medium text-muted-foreground mt-6 mb-3">Coming soon</h4>
+        <h4 className="text-[11px] font-mono uppercase tracking-[0.18em] text-white/40 mt-6 mb-3">
+          Coming soon
+        </h4>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 opacity-40 grayscale">
           {INACTIVE_PLATFORM_AGENTS.map((platform, i) => (
             <motion.div
@@ -375,24 +414,24 @@ export function AgentOrgChart() {
         animate={{ opacity: 1 }}
         transition={{ delay: 0.5, duration: 0.4 }}
       >
-        <h3 className="text-sm font-medium text-muted-foreground mb-4">
-          Workflow Patterns
+        <h3 className="text-[13px] font-semibold uppercase tracking-[0.18em] text-white/55 mb-4">
+          Workflow patterns
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {WORKFLOW_PATTERNS.map((wf) => (
-            <Card key={wf.name} size="sm" className="bg-black/30">
-              <CardContent className="py-3">
-                <div className="flex items-start gap-2">
-                  <wf.icon className="size-4 text-muted-foreground shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-xs font-medium">{wf.name}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {wf.description}
-                    </p>
-                  </div>
+            // Pattern tiles use the .cc-surface chrome (was a flat black/30
+            // Card) so they sit in the same depth language as the agent rows.
+            <div key={wf.name} className="cc-surface px-3 py-3">
+              <div className="flex items-start gap-2">
+                <wf.icon className="size-4 text-white/55 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-medium text-[#edeae0]">{wf.name}</p>
+                  <p className="text-xs text-white/55 mt-0.5">
+                    {wf.description}
+                  </p>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           ))}
         </div>
       </motion.div>

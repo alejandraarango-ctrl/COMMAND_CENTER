@@ -14,8 +14,6 @@ import { Separator } from "@/components/ui/separator";
 import {
   PlayIcon,
   LoaderIcon,
-  CheckCircle2Icon,
-  XCircleIcon,
   ChevronDownIcon,
   ChevronRightIcon,
 } from "lucide-react";
@@ -107,48 +105,62 @@ class ActionError extends Error {
   }
 }
 
+// Status pill — the one place run status gets its color. Maps the three
+// cron states onto the shared pill tokens so this card speaks the same
+// status language as the rest of the dashboard:
+//   success → --pill-ok (green)   failed → --pill-warn (red)
+//   running → --pill-idle, plus a live .cc-pip ping to read as "in flight".
+// The pill itself carries the dot; we set --pip-color to the pill's fg so
+// the ping matches the label color.
+function StatusPill({ status }: { status: PathwayLastRun["status"] }) {
+  const config =
+    status === "success"
+      ? { label: "Success", bg: "var(--pill-ok-bg)", fg: "var(--pill-ok-fg)", live: false }
+      : status === "failed"
+        ? { label: "Failed", bg: "var(--pill-warn-bg)", fg: "var(--pill-warn-fg)", live: false }
+        : { label: "Running", bg: "var(--pill-idle-bg)", fg: "var(--pill-idle-fg)", live: true };
+
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-[0.14em]"
+      style={{ backgroundColor: config.bg, color: config.fg }}
+    >
+      <span
+        className={`cc-pip ${config.live ? "cc-pip--live" : ""}`}
+        style={{ ["--pip-color" as never]: config.fg } as React.CSSProperties}
+        aria-hidden
+      />
+      {config.label}
+    </span>
+  );
+}
+
 function LastRunLine({ lastRun }: { lastRun: PathwayLastRun }) {
   const relative = formatTimeAgo(lastRun.startedAt);
 
   // Append "· N posts" when we have a count from the underlying cron_run.
   // Use singular "post" for 1, plural "posts" otherwise — small detail but
-  // the page reads weird without it.
+  // the page reads weird without it. Count is mono + tabular since it's a
+  // figure that changes between runs.
   const countNode =
     typeof lastRun.count === "number" ? (
       <>
-        <span>·</span>
-        <span>
+        <span className="text-white/30">·</span>
+        <span className="font-mono tabular text-white/55">
           {lastRun.count} {lastRun.count === 1 ? "post" : "posts"}
         </span>
       </>
     ) : null;
 
-  if (lastRun.status === "success") {
-    return (
-      <div className="flex items-center gap-1.5 text-xs text-[var(--overview-fg)]/55">
-        <CheckCircle2Icon className="size-3 text-[#8ca082]" />
-        <span>Last run: {relative}</span>
-        <span>·</span>
-        <span className="text-[#8ca082]">Success</span>
-        {countNode}
-      </div>
-    );
-  }
-  if (lastRun.status === "failed") {
-    return (
-      <div className="flex items-center gap-1.5 text-xs text-[var(--overview-fg)]/55">
-        <XCircleIcon className="size-3 text-red-500" />
-        <span>Last run: {relative}</span>
-        <span>·</span>
-        <span className="text-red-500">Failed</span>
-        {countNode}
-      </div>
-    );
-  }
+  // Timestamps are mono + tabular so digits don't jitter. The verb differs
+  // for the running state ("since") vs. terminal states ("Last run").
   return (
-    <div className="flex items-center gap-1.5 text-xs text-[var(--overview-fg)]/55">
-      <LoaderIcon className="size-3 animate-spin text-[#ae5630]" />
-      <span>Running since {relative}</span>
+    <div className="flex items-center gap-2 text-xs text-white/55">
+      <StatusPill status={lastRun.status} />
+      <span className="font-mono tabular text-white/45">
+        {lastRun.status === "running" ? `since ${relative}` : `Last run · ${relative}`}
+      </span>
+      {lastRun.status !== "running" && countNode}
     </div>
   );
 }
@@ -201,7 +213,7 @@ export function PathwayCard({
             {/* Ordinal badge only renders when the page is showing more than
                 one pathway. See PathwayCardProps.number for rationale. */}
             {number !== undefined && (
-              <Badge className="bg-white/[0.08] text-[var(--overview-fg)]/80 border-white/10 text-[11px]">
+              <Badge className="border-white/10 bg-white/[0.08] font-mono text-[11px] tracking-[0.1em] text-white/80">
                 Pathway {number}
               </Badge>
             )}
@@ -226,10 +238,13 @@ export function PathwayCard({
         <ol className="space-y-1.5">
           {steps.map((label, i) => (
             <li key={i} className="flex items-start gap-2.5 text-sm">
-              <span className="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-white/[0.06] text-[11px] text-[var(--overview-fg)]/70">
+              {/* Step index in mono so the numbered rail reads as a
+                  sequence of identifiers, consistent with the rest of the
+                  dashboard's "labels/counts/IDs are mono" voice. */}
+              <span className="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-white/[0.06] font-mono text-[11px] tabular text-white/70">
                 {i + 1}
               </span>
-              <span className="text-[var(--overview-fg)]/90">{label}</span>
+              <span className="text-white/90">{label}</span>
             </li>
           ))}
         </ol>
@@ -242,10 +257,16 @@ export function PathwayCard({
           )}
 
           {status === "success" && message && (
-            <span className="text-xs text-[#8ca082]">{message}</span>
+            <span className="text-xs" style={{ color: "var(--pill-ok-fg)" }}>
+              {message}
+            </span>
           )}
           {status === "error" && message && (
-            <span className="max-w-sm truncate text-xs text-red-500" title={message}>
+            <span
+              className="max-w-sm truncate text-xs"
+              style={{ color: "var(--pill-warn-fg)" }}
+              title={message}
+            >
               {message}
             </span>
           )}

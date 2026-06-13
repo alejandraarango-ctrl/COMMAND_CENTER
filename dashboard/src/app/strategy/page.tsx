@@ -36,6 +36,24 @@ import {
   type StepCategory,
 } from "./strategy-config";
 
+// Per-format-group identity colors. These mirror the Command Center
+// category palette (short=teal, written=gray, long=orange, mid=purple)
+// from the design system, so a format-group column on the matrix reads
+// with the same identity color it carries on the home page. We keep this
+// local (not in strategy-config.ts, which is data-only) because it's a
+// purely visual mapping introduced by the Refined Terracotta restyle.
+//
+// Note: these are deliberately distinct from SOURCE_COLORS — sources color
+// the *rows* (where a show originates), groups color the *columns* (the
+// output shape). Keeping the two palettes separate is what lets the matrix
+// read as a true cross-tab rather than one tint bleeding into the other.
+const FORMAT_GROUP_COLORS: Record<FormatGroup, string> = {
+  long: "#E5562C", // orange
+  mid: "#7B6FE8", // purple
+  short: "#16B68A", // teal
+  written: "#A8A39A", // gray
+};
+
 export default function StrategyPage() {
   const [shows, setShows] = useState<Show[]>(seedShows);
 
@@ -149,27 +167,35 @@ export default function StrategyPage() {
         ← Command Center
       </Link>
 
-      {/* Header: page title only.
-          Per spec: title is 18px, weight 500, sentence case. */}
-      <header className="mb-5">
-        <h1 className="text-[18px] font-medium text-[var(--foreground)]">
-          Media ecosystem
+      {/* Header — Refined Terracotta voice: a mono eyebrow above a large
+          tracked display title with a terracotta period. Wrapped in
+          .cc-reveal so it rises in on load with the rest of the page. */}
+      <header className="mb-7 cc-reveal">
+        <div className="cc-eyebrow mb-2">Strategy</div>
+        <h1 className="text-[40px] font-semibold tracking-[-0.025em] leading-[1.05] text-[#edeae0]">
+          Media ecosystem<span className="text-[var(--terracotta)]">.</span>
         </h1>
       </header>
 
-      {/* Legend */}
-      <Legend />
+      {/* Legend — staggered entrance after the header. */}
+      <div className="cc-reveal" style={{ animationDelay: "0.06s" }}>
+        <Legend />
+      </div>
 
       {/* Matrix table — wraps in overflow-x-auto so the sticky left column
-          works correctly when the viewport is narrower than min-w-[720px]. */}
-      <div className="overflow-x-auto mb-8">
+          works correctly when the viewport is narrower than min-w-[720px].
+          Staggered in after the legend. */}
+      <div
+        className="overflow-x-auto mb-8 cc-reveal"
+        style={{ animationDelay: "0.12s" }}
+      >
         <table className="min-w-[720px] w-full border-separate border-spacing-0">
           <thead>
             <tr>
               {/* Empty top-left cell — sticky to match the column it sits
                   above so it doesn't slide when the matrix scrolls. */}
               <th
-                className="sticky left-0 z-10 text-left align-bottom px-3 py-3 border-b-[0.5px] border-[var(--border)]"
+                className="sticky left-0 z-10 text-left align-bottom px-3 py-3 border-b border-[var(--surface-border)]"
                 style={{ backgroundColor: "var(--background)" }}
               >
                 {/* Intentionally blank — column 0 holds the show names. */}
@@ -197,8 +223,10 @@ export default function StrategyPage() {
         </table>
       </div>
 
-      {/* Platform settings panel */}
-      <PlatformSettingsPanel />
+      {/* Platform settings panel — last staggered block. */}
+      <div className="cc-reveal" style={{ animationDelay: "0.18s" }}>
+        <PlatformSettingsPanel />
+      </div>
 
       {/* Drawer overlay — only mounts while a show OR group is open.
           The dim backdrop and the drawer are siblings; both use
@@ -238,7 +266,7 @@ export default function StrategyPage() {
 
 function Legend() {
   return (
-    <div className="flex flex-wrap items-center gap-x-6 gap-y-3 mb-6 text-[11px] text-[var(--muted-foreground)]">
+    <div className="flex flex-wrap items-center gap-x-6 gap-y-3 mb-6 font-mono text-[11px] text-white/55">
       {/* Source colors */}
       <div className="flex items-center gap-3">
         {(Object.keys(SOURCE_LABELS) as Source[]).map((src) => (
@@ -292,7 +320,7 @@ function LegendDivider() {
     <span
       aria-hidden
       className="inline-block h-[14px] w-px"
-      style={{ backgroundColor: "var(--border)" }}
+      style={{ backgroundColor: "var(--surface-border)" }}
     />
   );
 }
@@ -319,20 +347,35 @@ function ColumnHeader({
     (p) => p.isExperimental,
   );
 
+  // Each column carries its format-group identity color (teal/purple/
+  // orange/gray) so the matrix reads as four distinct output buckets.
+  const groupColor = FORMAT_GROUP_COLORS[group];
+
   return (
-    <th className="text-left align-bottom px-3 py-3 border-b-[0.5px] border-[var(--border)]">
+    <th className="text-left align-bottom px-3 py-3 border-b border-[var(--surface-border)]">
       {/* Group label is a button — opens the first-principles drawer.
-          Hover tint reuses --terracotta-hover to match the show-name
-          button below, keeping the page's hoverable-text vocabulary
-          consistent. */}
+          A small category-color pip leads the label so the column's
+          identity is present even before hover; the label itself warms
+          to its category color on hover (rather than the global
+          terracotta) to reinforce that identity. */}
       <button
         type="button"
         onClick={(e) => onOpenGroup(group, e.currentTarget)}
-        className="text-[13px] font-medium text-[var(--foreground)] hover:text-[var(--terracotta-hover)] transition-colors text-left cursor-pointer"
+        className="group/col inline-flex items-center gap-1.5 text-[13px] font-medium text-[var(--foreground)] transition-colors text-left cursor-pointer"
       >
-        {FORMAT_GROUP_LABELS[group]}
+        <span
+          aria-hidden
+          className="inline-block h-[7px] w-[7px] rounded-full shrink-0"
+          style={{ backgroundColor: groupColor }}
+        />
+        <span
+          className="transition-colors group-hover/col:text-[var(--col-color)]"
+          style={{ ["--col-color" as never]: groupColor } as React.CSSProperties}
+        >
+          {FORMAT_GROUP_LABELS[group]}
+        </span>
       </button>
-      <div className="mt-1 text-[10px] text-[var(--overview-fg)]/35 leading-snug">
+      <div className="mt-1 font-mono text-[10px] text-[var(--overview-fg)]/35 leading-snug">
         {mainPlatforms.map((p, i) => (
           <span key={p.name} className="inline-flex items-center gap-1">
             {p.isRepost ? (
@@ -344,7 +387,7 @@ function ColumnHeader({
         ))}
       </div>
       {experimentalPlatforms.length > 0 ? (
-        <div className="mt-0.5 text-[10px] text-[var(--overview-fg)]/35 leading-snug opacity-60">
+        <div className="mt-0.5 font-mono text-[10px] text-[var(--overview-fg)]/35 leading-snug opacity-60">
           {experimentalPlatforms.map((p, i) => (
             <span key={p.name} className="inline-flex items-center gap-1">
               {p.isRepost ? (
@@ -390,7 +433,7 @@ function ShowRow({
           `self-stretch` utility just in case browser defaults change. */}
       <th
         scope="row"
-        className="sticky left-0 z-10 text-left border-b-[0.5px] border-[var(--border)] p-0"
+        className="sticky left-0 z-10 text-left border-b border-[var(--surface-border)] p-0"
         style={{ backgroundColor: "var(--background)" }}
       >
         <div className="flex items-stretch min-h-[44px]">
@@ -418,7 +461,7 @@ function ShowRow({
         return (
           <td
             key={group}
-            className="text-left px-3 py-2 border-b-[0.5px] border-l-[0.5px] border-[var(--border)] align-middle"
+            className="text-left px-3 py-2 border-b border-l border-[var(--surface-border)] align-middle"
             style={
               isHovered
                 ? {
@@ -499,14 +542,10 @@ function StatusCell({
 
 function PlatformSettingsPanel() {
   return (
-    <section
-      className="rounded-[8px] border-[0.5px] p-5"
-      style={{
-        backgroundColor: "var(--card)",
-        borderColor: "var(--border)",
-      }}
-    >
-      <div className="text-[11px] font-medium text-[var(--muted-foreground)] mb-3">
+    // Panel uses the shared .cc-surface card chrome (top-lit gradient +
+    // warm hairline) instead of a hand-rolled card fill.
+    <section className="cc-surface p-5">
+      <div className="text-[13px] font-semibold uppercase tracking-[0.18em] text-white/55 mb-4">
         Platform settings
       </div>
       <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-4">
@@ -522,16 +561,24 @@ function PlatformColumn({ group }: { group: { id: FormatGroup; label: string; pl
   const mainPlatforms = group.platforms.filter((p) => !p.isExperimental);
   const experimentalPlatforms = group.platforms.filter((p) => p.isExperimental);
 
+  // Category identity color for this group's heading dot.
+  const groupColor = FORMAT_GROUP_COLORS[group.id];
+
   return (
     <div>
-      <div className="text-[11px] font-medium text-[var(--foreground)] mb-2">
+      <div className="flex items-center gap-1.5 text-[11px] font-medium text-[var(--foreground)] mb-2">
+        <span
+          aria-hidden
+          className="inline-block h-[6px] w-[6px] rounded-full shrink-0"
+          style={{ backgroundColor: groupColor }}
+        />
         {group.label}
       </div>
       <ul className="space-y-1.5">
         {mainPlatforms.map((p) => (
           <li
             key={p.name}
-            className="flex items-center gap-1.5 text-[12px] text-[var(--muted-foreground)]"
+            className="flex items-center gap-1.5 font-mono text-[12px] text-white/55"
           >
             {p.isRepost ? (
               <RefreshCw className="size-[11px]" aria-label="repost" />
@@ -542,7 +589,7 @@ function PlatformColumn({ group }: { group: { id: FormatGroup; label: string; pl
         {experimentalPlatforms.map((p) => (
           <li
             key={p.name}
-            className="flex items-center gap-1.5 text-[12px] text-[var(--muted-foreground)] opacity-70"
+            className="flex items-center gap-1.5 font-mono text-[12px] text-white/55 opacity-70"
           >
             {p.isRepost ? (
               <RefreshCw className="size-[11px]" aria-label="repost" />
@@ -682,8 +729,11 @@ function ShowDrawer({
       aria-modal="true"
       aria-label={`${show.name} details`}
       // Slide-in animation via tw-animate-css. 200ms duration matches
-      // the spec; ease is the default (CSS ease-in-out).
-      className="fixed top-0 right-0 h-screen w-full md:w-[60vw] md:max-w-[720px] bg-[var(--background)] z-[50] flex flex-col animate-in slide-in-from-right duration-200 border-l-[0.5px] border-[var(--border)]"
+      // the spec; ease is the default (CSS ease-in-out). The drawer is an
+      // opaque overlay (it sits above the dim backdrop, not the page), so
+      // it gets the warm --surface-bg panel fill + a hairline left border.
+      className="fixed top-0 right-0 h-screen w-full md:w-[60vw] md:max-w-[720px] z-[50] flex flex-col animate-in slide-in-from-right duration-200 border-l border-[var(--surface-border)]"
+      style={{ backgroundColor: "var(--surface-bg)" }}
     >
       <DrawerHeader show={show} onClose={onClose} closeBtnRef={closeBtnRef} />
       <DrawerTabsNav source={show.source} tab={tab} onTabChange={setTab} />
@@ -717,17 +767,17 @@ function DrawerHeader({
   closeBtnRef: React.RefObject<HTMLButtonElement | null>;
 }) {
   return (
-    <header className="flex items-stretch gap-3 px-6 py-5 border-b-[0.5px] border-[var(--border)]">
+    <header className="flex items-stretch gap-3 px-6 py-5 border-b border-[var(--surface-border)]">
       <div
         aria-hidden
         className="self-stretch w-1 rounded-[2px]"
         style={{ backgroundColor: SOURCE_COLORS[show.source] }}
       />
       <div className="flex-1 min-w-0">
-        <h2 className="text-[17px] font-medium text-[var(--foreground)] truncate">
+        <h2 className="text-[17px] font-semibold tracking-[-0.015em] text-[#edeae0] truncate">
           {show.name}
         </h2>
-        <p className="text-[11px] text-[var(--overview-fg)]/35 mt-1">
+        <p className="font-mono text-[11px] text-[var(--overview-fg)]/40 mt-1">
           Source: {SOURCE_LABELS[show.source]} · Owner: {show.owner ?? "—"} ·
           Updated {formatRelative(show.updatedAt)}
         </p>
@@ -737,7 +787,7 @@ function DrawerHeader({
         type="button"
         onClick={onClose}
         aria-label="Close"
-        className="text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors self-start"
+        className="text-white/55 hover:text-[#edeae0] transition-colors self-start"
       >
         <X className="size-4" />
       </button>
@@ -762,7 +812,7 @@ function DrawerTabsNav({
 }) {
   return (
     <nav
-      className="flex gap-6 px-6 border-b-[0.5px] border-[var(--border)]"
+      className="flex gap-6 px-6 border-b border-[var(--surface-border)]"
       role="tablist"
     >
       {DRAWER_TABS.map((t) => {
@@ -776,9 +826,7 @@ function DrawerTabsNav({
             onClick={() => onTabChange(t.id)}
             className="py-3 text-[12px] font-medium transition-colors"
             style={{
-              color: isActive
-                ? "var(--foreground)"
-                : "var(--muted-foreground)",
+              color: isActive ? "#edeae0" : "rgba(237,234,224,0.55)",
               // Underline overlaps the nav's bottom border by 0.5px so
               // the active tab visually "claims" that line.
               borderBottom: isActive
@@ -856,12 +904,15 @@ function CreativeBriefTab({
         // written. overflow-hidden + resize-none + JS auto-grow lets
         // the textarea expand vertically and pushes scroll up to the
         // drawer body — no inner scrollbar.
-        className="block w-full font-mono text-[12px] bg-transparent border-[0.5px] rounded-[8px] px-3 py-2 text-[var(--foreground)] focus:outline-none focus:border-[var(--terracotta)] resize-none overflow-hidden leading-relaxed whitespace-pre"
-        style={{ borderColor: "var(--border)" }}
+        className="block w-full font-mono text-[12px] border rounded-lg px-3 py-2 text-[#edeae0] focus:outline-none focus:border-[var(--terracotta)] resize-none overflow-hidden leading-relaxed whitespace-pre"
+        style={{
+          backgroundColor: "var(--surface-bg)",
+          borderColor: "var(--surface-border)",
+        }}
       />
       {show.briefLinks && show.briefLinks.length > 0 ? (
         <section>
-          <div className="text-[11px] font-medium text-[var(--muted-foreground)] mb-3">
+          <div className="text-[13px] font-semibold uppercase tracking-[0.18em] text-white/55 mb-3">
             References
           </div>
           <div className="space-y-2">
@@ -889,17 +940,13 @@ function BriefLinkCard({ label, url }: { label: string; url: string }) {
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className="flex items-center justify-between gap-3 rounded-[8px] border-[0.5px] px-4 py-3 text-[13px] text-[var(--foreground)] hover:border-[var(--terracotta)] transition-colors"
-      style={{
-        backgroundColor: "var(--card)",
-        borderColor: "var(--border)",
-      }}
+      className="cc-surface cc-surface--interactive flex items-center justify-between gap-3 px-4 py-3 text-[13px] text-[#edeae0]"
     >
       <span className="flex items-center gap-2 min-w-0">
-        <ExternalLink className="size-4 shrink-0 text-[var(--muted-foreground)]" />
+        <ExternalLink className="size-4 shrink-0 text-white/55" />
         <span className="truncate">{label}</span>
       </span>
-      <span className="text-[11px] text-[var(--muted-foreground)] shrink-0">
+      <span className="font-mono text-[11px] text-white/55 shrink-0">
         {getLinkSourceLabel(url)}
       </span>
     </a>
@@ -991,13 +1038,13 @@ function AutomationTab({
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-5">
-        <div className="text-[11px] text-[var(--muted-foreground)]">
+        <div className="font-mono text-[11px] text-white/55">
           Workflow from capture to distribution
         </div>
         <button
           type="button"
           onClick={() => setShowAddForm((v) => !v)}
-          className="inline-flex items-center gap-1 text-[12px] font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+          className="inline-flex items-center gap-1 text-[12px] font-medium text-white/55 hover:text-[#edeae0] transition-colors"
         >
           <Plus className="size-3" />
           Add step
@@ -1020,14 +1067,14 @@ function AutomationTab({
           const isLast = idx === STEP_CATEGORY_ORDER.length - 1;
           return (
             <div key={category}>
-              <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--overview-fg)]/35 mb-2">
+              <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--overview-fg)]/40 mb-2">
                 {STEP_CATEGORY_LABELS[category]}
               </div>
 
               {steps.length === 0 ? (
                 <div
-                  className="rounded-[8px] border-[0.5px] border-dashed px-3 py-3 text-[11px] text-[var(--overview-fg)]/35"
-                  style={{ borderColor: "var(--border)" }}
+                  className="rounded-lg border border-dashed px-3 py-3 font-mono text-[11px] text-[var(--overview-fg)]/35"
+                  style={{ borderColor: "var(--surface-border)" }}
                 >
                   No steps yet
                 </div>
@@ -1115,10 +1162,10 @@ function StepCard({
     isDistribution && step.group ? show.distribution[step.group] : null;
 
   // Border treatment: distribution cards get the source-color border
-  // matched to status. Non-distribution cards keep the warm card fill
-  // with no special border (no source-color hint needed).
+  // matched to status (preserving the row's source identity on the card).
+  // Non-distribution cards fall back to the shared warm hairline token.
   let borderStyle: React.CSSProperties = {
-    borderColor: "var(--border)",
+    borderColor: "var(--surface-border)",
     borderStyle: "solid",
   };
   if (isDistribution && effectiveStatus === "active") {
@@ -1144,22 +1191,28 @@ function StepCard({
     <div
       onMouseEnter={onHoverEnter}
       onMouseLeave={onHoverLeave}
-      className="rounded-[8px] border-[0.5px] p-3 transition-colors"
+      // Card surface uses the system top-lit gradient + warm-card inset.
+      // The border is driven by `borderStyle` above (source-color for
+      // distribution, hairline otherwise), so we set background + radius
+      // here rather than via .cc-surface (whose border we'd be overriding).
+      className="rounded-xl border p-3 transition-colors"
       style={{
-        backgroundColor: "var(--card)",
+        background:
+          "linear-gradient(180deg, var(--surface-card-top), var(--surface-card-bottom))",
+        boxShadow: "var(--shadow-card)",
         ...borderStyle,
       }}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
-          <div className="text-[10px] uppercase tracking-[0.08em] text-[var(--overview-fg)]/35">
+          <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--overview-fg)]/40">
             {STEP_CATEGORY_LABELS[step.category]}
           </div>
-          <div className="text-[13px] font-medium text-[var(--foreground)] mt-1">
+          <div className="text-[13px] font-medium text-[#edeae0] mt-1">
             {step.title}
           </div>
           {step.description ? (
-            <p className="text-[11px] text-[var(--muted-foreground)] mt-1 leading-snug">
+            <p className="text-[11px] text-white/55 mt-1 leading-snug">
               {step.description}
             </p>
           ) : null}
@@ -1173,7 +1226,7 @@ function StepCard({
           {destinationPlatforms.map((p) => (
             <div
               key={p.name}
-              className="text-[10px] text-[var(--overview-fg)]/45"
+              className="font-mono text-[10px] text-[var(--overview-fg)]/45"
             >
               → {p.name}
             </div>
@@ -1221,31 +1274,30 @@ function AddStepForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="rounded-[8px] border-[0.5px] p-4 mb-5 space-y-3"
-      style={{
-        backgroundColor: "var(--card)",
-        borderColor: "var(--border)",
-      }}
+      className="cc-surface p-4 mb-5 space-y-3"
     >
       <div>
-        <div className="text-[10px] uppercase tracking-[0.08em] text-[var(--overview-fg)]/35 mb-1.5">
+        <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--overview-fg)]/40 mb-1.5">
           Category
         </div>
         <div className="flex gap-2">
           {STEP_CATEGORY_ORDER.map((c) => (
+            // Selected category uses the terracotta accent (the system's
+            // interactive/selected color); unselected stays a muted ghost
+            // chip with a hairline border.
             <button
               key={c}
               type="button"
               onClick={() => setCategory(c)}
-              className="rounded-full px-2.5 py-[3px] text-[11px] font-medium border-[0.5px] transition-colors"
+              className="rounded-full px-2.5 py-[3px] text-[11px] font-medium border transition-colors"
               style={{
                 backgroundColor:
-                  category === c ? "var(--foreground)" : "transparent",
-                color:
+                  category === c ? "var(--terracotta)" : "transparent",
+                color: category === c ? "#fafafa" : "rgba(237,234,224,0.55)",
+                borderColor:
                   category === c
-                    ? "var(--background)"
-                    : "var(--muted-foreground)",
-                borderColor: "var(--border)",
+                    ? "var(--terracotta)"
+                    : "var(--surface-border)",
               }}
             >
               {STEP_CATEGORY_LABELS[c]}
@@ -1257,7 +1309,7 @@ function AddStepForm({
       <div>
         <label
           htmlFor="step-title"
-          className="text-[10px] uppercase tracking-[0.08em] text-[var(--overview-fg)]/35 block mb-1"
+          className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--overview-fg)]/40 block mb-1"
         >
           Title
         </label>
@@ -1266,15 +1318,18 @@ function AddStepForm({
           type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          className="w-full text-[12px] bg-transparent border-[0.5px] rounded-[6px] px-2.5 py-1.5 text-[var(--foreground)] focus:outline-none focus:border-[var(--terracotta)]"
-          style={{ borderColor: "var(--border)" }}
+          className="w-full text-[12px] border rounded-md px-2.5 py-1.5 text-[#edeae0] focus:outline-none focus:border-[var(--terracotta)]"
+          style={{
+            backgroundColor: "var(--surface-bg)",
+            borderColor: "var(--surface-border)",
+          }}
         />
       </div>
 
       <div>
         <label
           htmlFor="step-desc"
-          className="text-[10px] uppercase tracking-[0.08em] text-[var(--overview-fg)]/35 block mb-1"
+          className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--overview-fg)]/40 block mb-1"
         >
           Description
         </label>
@@ -1283,8 +1338,11 @@ function AddStepForm({
           type="text"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          className="w-full text-[12px] bg-transparent border-[0.5px] rounded-[6px] px-2.5 py-1.5 text-[var(--foreground)] focus:outline-none focus:border-[var(--terracotta)]"
-          style={{ borderColor: "var(--border)" }}
+          className="w-full text-[12px] border rounded-md px-2.5 py-1.5 text-[#edeae0] focus:outline-none focus:border-[var(--terracotta)]"
+          style={{
+            backgroundColor: "var(--surface-bg)",
+            borderColor: "var(--surface-border)",
+          }}
         />
       </div>
 
@@ -1293,7 +1351,7 @@ function AddStepForm({
           <div>
             <label
               htmlFor="step-group"
-              className="text-[10px] uppercase tracking-[0.08em] text-[var(--overview-fg)]/35 block mb-1"
+              className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--overview-fg)]/40 block mb-1"
             >
               Group
             </label>
@@ -1301,8 +1359,11 @@ function AddStepForm({
               id="step-group"
               value={group}
               onChange={(e) => setGroup(e.target.value as FormatGroup)}
-              className="w-full text-[12px] bg-transparent border-[0.5px] rounded-[6px] px-2.5 py-1.5 text-[var(--foreground)] focus:outline-none focus:border-[var(--terracotta)]"
-              style={{ borderColor: "var(--border)" }}
+              className="w-full text-[12px] border rounded-md px-2.5 py-1.5 text-[#edeae0] focus:outline-none focus:border-[var(--terracotta)]"
+              style={{
+                backgroundColor: "var(--surface-bg)",
+                borderColor: "var(--surface-border)",
+              }}
             >
               {FORMAT_GROUP_ORDER.map((g) => (
                 <option key={g} value={g}>
@@ -1314,7 +1375,7 @@ function AddStepForm({
           <div>
             <label
               htmlFor="step-status"
-              className="text-[10px] uppercase tracking-[0.08em] text-[var(--overview-fg)]/35 block mb-1"
+              className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--overview-fg)]/40 block mb-1"
             >
               Status
             </label>
@@ -1322,8 +1383,11 @@ function AddStepForm({
               id="step-status"
               value={status}
               onChange={(e) => setStatus(e.target.value as Status)}
-              className="w-full text-[12px] bg-transparent border-[0.5px] rounded-[6px] px-2.5 py-1.5 text-[var(--foreground)] focus:outline-none focus:border-[var(--terracotta)]"
-              style={{ borderColor: "var(--border)" }}
+              className="w-full text-[12px] border rounded-md px-2.5 py-1.5 text-[#edeae0] focus:outline-none focus:border-[var(--terracotta)]"
+              style={{
+                backgroundColor: "var(--surface-bg)",
+                borderColor: "var(--surface-border)",
+              }}
             >
               <option value="active">Active</option>
               <option value="experiment">Experiment</option>
@@ -1337,7 +1401,7 @@ function AddStepForm({
         <button
           type="button"
           onClick={onCancel}
-          className="text-[12px] font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+          className="text-[12px] font-medium text-white/55 hover:text-[#edeae0] transition-colors"
         >
           Cancel
         </button>
@@ -1348,6 +1412,9 @@ function AddStepForm({
           style={{
             backgroundColor: "var(--terracotta)",
             opacity: canSubmit ? 1 : 0.4,
+            // Soft terracotta glow on the enabled CTA, matching the
+            // system's filled-button treatment.
+            boxShadow: canSubmit ? "var(--glow-terra)" : "none",
           }}
         >
           Add
@@ -1387,14 +1454,22 @@ function GroupDrawer({
       role="dialog"
       aria-modal="true"
       aria-label={`${group.label} first principles`}
-      className="fixed top-0 right-0 h-screen w-full md:w-[60vw] md:max-w-[720px] bg-[var(--background)] z-[50] flex flex-col animate-in slide-in-from-right duration-200 border-l-[0.5px] border-[var(--border)]"
+      className="fixed top-0 right-0 h-screen w-full md:w-[60vw] md:max-w-[720px] z-[50] flex flex-col animate-in slide-in-from-right duration-200 border-l border-[var(--surface-border)]"
+      style={{ backgroundColor: "var(--surface-bg)" }}
     >
-      <header className="flex items-stretch gap-3 px-6 py-5 border-b-[0.5px] border-[var(--border)]">
+      <header className="flex items-stretch gap-3 px-6 py-5 border-b border-[var(--surface-border)]">
+        {/* Group's category identity color leads the header as a vertical
+            bar, mirroring the source-color bar on the show drawer. */}
+        <div
+          aria-hidden
+          className="self-stretch w-1 rounded-[2px]"
+          style={{ backgroundColor: FORMAT_GROUP_COLORS[group.id] }}
+        />
         <div className="flex-1 min-w-0">
-          <h2 className="text-[17px] font-medium text-[var(--foreground)] truncate">
+          <h2 className="text-[17px] font-semibold tracking-[-0.015em] text-[#edeae0] truncate">
             {group.label}
           </h2>
-          <p className="text-[11px] text-[var(--overview-fg)]/35 mt-1">
+          <p className="font-mono text-[11px] text-[var(--overview-fg)]/40 mt-1">
             Format group · {platformCount}{" "}
             {platformCount === 1 ? "platform" : "platforms"}
           </p>
@@ -1404,7 +1479,7 @@ function GroupDrawer({
           type="button"
           onClick={onClose}
           aria-label="Close"
-          className="text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors self-start"
+          className="text-white/55 hover:text-[#edeae0] transition-colors self-start"
         >
           <X className="size-4" />
         </button>
@@ -1413,11 +1488,11 @@ function GroupDrawer({
       {/* Single-tab nav. We keep the tablist semantics + visual
           treatment even with only one tab so the drawer reads as
           consistent with the show drawer — and so dropping in a
-          second tab later is a one-line change. Underline color uses
-          --foreground (white) instead of a source color since groups
-          don't belong to a source palette. */}
+          second tab later is a one-line change. Underline color uses the
+          group's category identity color (matching the header bar) so the
+          drawer is visually tied to the column that opened it. */}
       <nav
-        className="flex gap-6 px-6 border-b-[0.5px] border-[var(--border)]"
+        className="flex gap-6 px-6 border-b border-[var(--surface-border)]"
         role="tablist"
       >
         <button
@@ -1426,8 +1501,8 @@ function GroupDrawer({
           aria-selected="true"
           className="py-3 text-[12px] font-medium uppercase tracking-[0.08em]"
           style={{
-            color: "var(--foreground)",
-            borderBottom: "2px solid var(--foreground)",
+            color: "#edeae0",
+            borderBottom: `2px solid ${FORMAT_GROUP_COLORS[group.id]}`,
             marginBottom: "-0.5px",
           }}
         >
@@ -1452,7 +1527,7 @@ function FirstPrinciplesTab({ group }: { group: PlatformGroup }) {
   if (!group.firstPrinciples) {
     return (
       <div className="p-6">
-        <p className="text-[12px] text-[var(--muted-foreground)] italic">
+        <p className="text-[12px] text-white/55 italic">
           No first principles defined yet.
         </p>
       </div>
@@ -1460,7 +1535,7 @@ function FirstPrinciplesTab({ group }: { group: PlatformGroup }) {
   }
   return (
     <div className="p-6">
-      <pre className="font-mono text-[12px] text-[var(--foreground)] leading-relaxed whitespace-pre-wrap">
+      <pre className="font-mono text-[12px] text-[#edeae0] leading-relaxed whitespace-pre-wrap">
         {renderFirstPrinciplesWithLinks(group.firstPrinciples)}
       </pre>
     </div>

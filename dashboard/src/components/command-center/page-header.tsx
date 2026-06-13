@@ -1,71 +1,91 @@
 /*
- * PageHeader — Command Center title row + legend.
+ * PageHeader — Command Center title row.
  *
- * The legend uses the same four CATEGORY_COLORS as the rest of the page.
- * Categories without any formats are dimmed to ~50% opacity so the user
- * can see "this bucket exists but is empty" at a glance, matching the
- * dimmed-then-collapsed pattern of the empty bands at the bottom.
+ * Matches the refined-terracotta mock exactly:
+ *   - a mono eyebrow ("Media · Command Center") with a *subtle* Strategy
+ *     link tucked to the far right of the eyebrow row (present for
+ *     navigation, but low-emphasis so it never competes with the title),
+ *   - a 50px display title with a terracotta period,
+ *   - a live/paused tally with big tabular numerals and status pips.
+ *
+ * The four-color category legend that used to sit under the title was
+ * removed to match the mock — category identity now reads from the
+ * colored section rules further down the page instead.
  */
 import Link from "next/link";
-import { ArrowUpRight } from "lucide-react";
-import {
-  CATEGORY_COLORS,
-  CATEGORY_LABELS,
-  CATEGORY_ORDER,
-  type FormatGroup,
-} from "@/lib/command-center-config";
+import { ArrowUpRight, Compass } from "lucide-react";
 
 interface PageHeaderProps {
   liveCount: number;
   pausedCount: number;
-  populatedCategories: Set<FormatGroup>;
 }
 
-export function PageHeader({
-  liveCount,
-  pausedCount,
-  populatedCategories,
-}: PageHeaderProps) {
+export function PageHeader({ liveCount, pausedCount }: PageHeaderProps) {
   return (
     <header>
+      {/* Eyebrow row: brand label on the left, a faint Strategy link on the
+          right. Strategy lives on its own page (/strategy) — a planning
+          surface — so it stays reachable, but rendered small and muted here
+          so the title carries the visual weight. */}
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-[24px] font-medium tracking-tight text-[#edeae0]">
-          Command Center
-        </h1>
-        <div className="flex items-center gap-4">
-          <div className="text-[12px] text-white/45">
-            {liveCount} live · {pausedCount} paused
-          </div>
-          {/* Strategy lives on its own page (/strategy) — a planning /
-              architecture view rather than a daily-ops surface. */}
-          <Link
-            href="/strategy"
-            className="inline-flex items-center gap-1 rounded-md border border-white/10 px-2.5 py-1 text-[11px] text-white/55 transition-colors duration-150 hover:border-white/25 hover:text-white/85"
-          >
-            Strategy
-            <ArrowUpRight className="h-3 w-3" aria-hidden />
-          </Link>
-        </div>
+        <span
+          className="font-mono text-[11px] uppercase"
+          style={{ letterSpacing: "0.28em", color: "var(--terracotta-hover)" }}
+        >
+          Media · Command Center
+        </span>
+        <Link
+          href="/strategy"
+          className="inline-flex items-center gap-1 font-mono text-[10.5px] uppercase tracking-[0.16em] text-white/35 transition-colors duration-150 hover:text-white/70"
+        >
+          {/* Compass glyph identifies this as the planning/strategy surface
+              at a glance — leads the label so the link reads as more than a
+              generic "go elsewhere" arrow. */}
+          <Compass className="h-3 w-3" aria-hidden />
+          Strategy
+          <ArrowUpRight className="h-3 w-3" aria-hidden />
+        </Link>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-4 text-[11px] text-white/55">
-        {CATEGORY_ORDER.map((c) => {
-          const isPopulated = populatedCategories.has(c);
-          return (
-            <div
-              key={c}
-              className="flex items-center gap-1.5 transition-opacity duration-150"
-              style={{ opacity: isPopulated ? 1 : 0.5 }}
-            >
+      <div className="mt-3.5 flex items-end justify-between gap-8 flex-wrap">
+        <h1 className="text-[50px] font-semibold leading-none tracking-[-0.025em] text-[#edeae0]">
+          Command Center<span style={{ color: "var(--terracotta)" }}>.</span>
+        </h1>
+
+        {/* Live / paused tally — big tabular numerals; the live count gets a
+            pinging green pip, the paused count a static terracotta pip. */}
+        <div className="flex items-end gap-7">
+          <div>
+            <div className="tabular flex items-center gap-2.5 text-[34px] font-bold leading-none text-[#edeae0]">
               <span
-                aria-hidden
-                className="h-2 w-2 rounded-full"
-                style={{ backgroundColor: CATEGORY_COLORS[c] }}
+                className="cc-pip cc-pip--live"
+                style={{ ["--pip-color" as never]: "var(--pill-ok-fg)" } as React.CSSProperties}
               />
-              <span>{CATEGORY_LABELS[c]}</span>
+              {liveCount}
             </div>
-          );
-        })}
+            <div
+              className="mt-[7px] font-mono text-[10.5px] uppercase"
+              style={{ letterSpacing: "0.18em", color: "rgba(237,234,224,0.58)" }}
+            >
+              Live
+            </div>
+          </div>
+          <div>
+            <div className="tabular flex items-center gap-2.5 text-[34px] font-bold leading-none text-[#edeae0]">
+              <span
+                className="cc-pip"
+                style={{ ["--pip-color" as never]: "var(--terracotta)", opacity: 0.7 } as React.CSSProperties}
+              />
+              {pausedCount}
+            </div>
+            <div
+              className="mt-[7px] font-mono text-[10.5px] uppercase"
+              style={{ letterSpacing: "0.18em", color: "rgba(237,234,224,0.58)" }}
+            >
+              Paused
+            </div>
+          </div>
+        </div>
       </div>
     </header>
   );

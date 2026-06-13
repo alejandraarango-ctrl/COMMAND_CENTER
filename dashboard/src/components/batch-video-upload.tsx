@@ -349,7 +349,10 @@ export function BatchVideoUpload() {
 
   return (
     <div className="max-w-xl space-y-4">
-      {/* Drop zone */}
+      {/* Drop zone — a cc-surface card whose border is overridden to a warm
+          dashed outline so it reads as a "drop target" rather than a solid
+          panel. On drag-over it warms to the terracotta accent + soft wash
+          (tokens, not raw hex) to confirm the drop is live. */}
       <div
         onDragOver={(e) => {
           e.preventDefault();
@@ -358,17 +361,30 @@ export function BatchVideoUpload() {
         onDragLeave={() => setDragging(false)}
         onDrop={onDrop}
         onClick={() => fileInputRef.current?.click()}
-        className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-6 py-10 text-center transition-colors ${
-          dragging
-            ? "border-[#3b82f6] bg-[#3b82f6]/10"
-            : "border-white/[0.12] bg-white/[0.02] hover:bg-white/[0.04]"
-        } ${queueFull ? "pointer-events-none opacity-50" : ""}`}
+        className={`cc-surface flex cursor-pointer flex-col items-center justify-center gap-2 border-dashed px-6 py-10 text-center transition-colors ${
+          queueFull ? "pointer-events-none opacity-50" : ""
+        }`}
+        style={
+          {
+            // Drag-over: terracotta dashed border + soft wash. At rest: a
+            // hairline warm dashed border over the gradient surface.
+            borderColor: dragging
+              ? "var(--terracotta)"
+              : "var(--surface-border-hi)",
+            background: dragging ? "var(--terracotta-soft)" : undefined,
+          } as React.CSSProperties
+        }
       >
-        <UploadCloudIcon className="size-6 text-[var(--overview-fg)]/50" />
-        <p className="text-sm text-[var(--overview-fg)]/80">
+        <UploadCloudIcon
+          className="size-6"
+          style={{
+            color: dragging ? "var(--terracotta-hover)" : "rgba(237,234,224,0.5)",
+          }}
+        />
+        <p className="text-sm text-[#edeae0]/85">
           Drag a batch of videos here, or click to choose
         </p>
-        <p className="text-[11px] text-[var(--overview-fg)]/40">
+        <p className="font-mono text-[11px] text-white/40">
           mp4 / mov / webm / m4v · up to 2 GB each · title &amp; caption
           generated automatically
         </p>
@@ -383,7 +399,7 @@ export function BatchVideoUpload() {
       </div>
 
       {queueFull && (
-        <p className="text-xs text-amber-400">
+        <p className="text-xs text-[var(--pill-warn-fg)]">
           Queue full — dismiss a finished item to add more.
         </p>
       )}
@@ -418,14 +434,17 @@ function BatchSlotTab({
   const queued = slot.phase === "queued";
   const anyFanoutError = !!(slot.youtubeError || slot.xError);
 
-  const containerClasses =
+  // Per-item status uses the shared pill palette so the queue colors match
+  // every other status surface in the app: done → ok (green), error/partial
+  // → warn (red), in-flight/queued → idle (neutral wash on the panel).
+  // Driven via inline CSS vars (background + border tint) rather than raw
+  // hex utility classes that would drift from the token set.
+  const statusStyle: React.CSSProperties =
     slot.phase === "success" && !anyFanoutError
-      ? "bg-[#8ca082]/10 border-[#8ca082]/20"
-      : slot.phase === "success" && anyFanoutError
-        ? "bg-amber-500/10 border-amber-500/20"
-        : slot.phase === "failed"
-          ? "bg-red-500/10 border-red-500/20"
-          : "bg-white/[0.04] border-white/[0.06]";
+      ? { backgroundColor: "var(--pill-ok-bg)", borderColor: "var(--pill-ok-fg)" }
+      : (slot.phase === "success" && anyFanoutError) || slot.phase === "failed"
+        ? { backgroundColor: "var(--pill-warn-bg)", borderColor: "var(--pill-warn-fg)" }
+        : { backgroundColor: "var(--surface-bg)", borderColor: "var(--surface-border)" };
 
   const progressPct =
     slot.bytesTotal > 0
@@ -448,30 +467,35 @@ function BatchSlotTab({
               : "Failed";
 
   return (
-    <div className={`rounded-lg border px-3 py-2 text-xs ${containerClasses}`}>
+    <div className="rounded-xl border px-3 py-2 text-xs" style={statusStyle}>
       <div className="flex items-center gap-2">
         {(inFlight || queued) && (
-          <LoaderIcon className="size-3.5 shrink-0 animate-spin text-[var(--overview-fg)]/70" />
+          <LoaderIcon className="size-3.5 shrink-0 animate-spin text-white/70" />
         )}
         {slot.phase === "success" && !anyFanoutError && (
-          <CheckCircle2Icon className="size-3.5 shrink-0 text-[#8ca082]" />
+          <CheckCircle2Icon className="size-3.5 shrink-0 text-[var(--pill-ok-fg)]" />
         )}
         {slot.phase === "success" && anyFanoutError && (
-          <XCircleIcon className="size-3.5 shrink-0 text-amber-400" />
+          <XCircleIcon className="size-3.5 shrink-0 text-[var(--pill-warn-fg)]" />
         )}
         {slot.phase === "failed" && (
-          <XCircleIcon className="size-3.5 shrink-0 text-red-400" />
+          <XCircleIcon className="size-3.5 shrink-0 text-[var(--pill-warn-fg)]" />
         )}
 
         <div className="min-w-0 flex-1">
           <p
-            className="truncate font-medium text-[var(--overview-fg)]/85"
+            className="truncate font-medium text-[#edeae0]/85"
             title={slot.filename}
           >
             {slot.filename}
           </p>
-          <p className="text-[10px] text-[var(--overview-fg)]/40">
-            {(slot.fileSize / (1024 * 1024)).toFixed(1)} MB · {phaseLabel}
+          {/* Size + phase label in mono so the figures + state read as a
+              status line. */}
+          <p className="font-mono text-[10px] text-white/40">
+            <span className="tabular">
+              {(slot.fileSize / (1024 * 1024)).toFixed(1)} MB
+            </span>{" "}
+            · {phaseLabel}
           </p>
         </div>
 
@@ -485,7 +509,7 @@ function BatchSlotTab({
             size="icon-xs"
             onClick={onCancel}
             aria-label="Cancel upload"
-            className="shrink-0 text-[var(--overview-fg)]/50 hover:text-[var(--overview-fg)]"
+            className="shrink-0 text-white/50 hover:text-[#edeae0]"
           >
             <XIcon />
           </Button>
@@ -496,7 +520,7 @@ function BatchSlotTab({
               size="icon-xs"
               onClick={onDismiss}
               aria-label="Dismiss"
-              className="shrink-0 text-[var(--overview-fg)]/50 hover:text-[var(--overview-fg)]"
+              className="shrink-0 text-white/50 hover:text-[#edeae0]"
             >
               <XIcon />
             </Button>
@@ -504,45 +528,49 @@ function BatchSlotTab({
         )}
       </div>
 
+      {/* Upload progress — terracotta accent fill on a recessed track, so an
+          active upload reads as the "live" accent state. */}
       {slot.phase === "uploading" && (
-        <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-white/[0.06]">
+        <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-[var(--pill-idle-bg)]">
           <div
-            className="h-full bg-[#3b82f6] transition-[width] duration-150"
+            className="h-full bg-[var(--terracotta)] transition-[width] duration-150"
             style={{ width: `${progressPct}%` }}
           />
         </div>
       )}
 
       {slot.phase === "failed" && slot.message && (
-        <p className="mt-1 break-words text-[11px] text-red-400">{slot.message}</p>
+        <p className="mt-1 break-words text-[11px] text-[var(--pill-warn-fg)]">
+          {slot.message}
+        </p>
       )}
 
-      {/* On success: show the generated title + caption and buffer badges. */}
+      {/* On success: show the generated title + caption and buffer badges.
+          Buffer IDs render in mono (they're machine identifiers); per-platform
+          failures use the warn pill foreground. */}
       {slot.phase === "success" && (
         <div className="mt-1.5 space-y-1">
           {slot.title && (
-            <p className="text-[11px] text-[var(--overview-fg)]/80">
-              <span className="text-[var(--overview-fg)]/40">Title:</span>{" "}
-              {slot.title}
+            <p className="text-[11px] text-[#edeae0]/80">
+              <span className="text-white/40">Title:</span> {slot.title}
             </p>
           )}
           {slot.caption && (
-            <p className="break-words text-[11px] text-[var(--overview-fg)]/70">
-              <span className="text-[var(--overview-fg)]/40">Caption:</span>{" "}
-              {slot.caption}
+            <p className="break-words text-[11px] text-[#edeae0]/70">
+              <span className="text-white/40">Caption:</span> {slot.caption}
             </p>
           )}
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 font-mono text-[10px] text-[var(--overview-fg)]/60">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 font-mono text-[10px] text-white/60">
             {slot.tiktokBufferId && <span>TT: {slot.tiktokBufferId}</span>}
             {slot.youtubeBufferId && <span>YT: {slot.youtubeBufferId}</span>}
             {slot.xBufferId && <span>X: {slot.xBufferId}</span>}
             {slot.youtubeError && (
-              <span className="break-words text-red-400">
+              <span className="break-words text-[var(--pill-warn-fg)]">
                 YT failed: {slot.youtubeError}
               </span>
             )}
             {slot.xError && (
-              <span className="break-words text-red-400">
+              <span className="break-words text-[var(--pill-warn-fg)]">
                 X failed: {slot.xError}
               </span>
             )}

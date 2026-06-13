@@ -92,9 +92,9 @@ export default function L1QAPage() {
   return (
     <AppShell>
       {/* Header block — mirrors the language of the home page's
-          PageHeader (small uppercase wordmark, title, muted subtitle)
+          PageHeader (mono eyebrow, large display title, muted subtitle)
           so navigating between / and /l1-qa feels continuous. */}
-      <div className="mb-10">
+      <div className="mb-10 cc-reveal">
         <Link
           href="/"
           className="inline-flex items-center gap-1.5 text-[12px] text-white/55 transition-colors hover:text-white/85"
@@ -103,23 +103,29 @@ export default function L1QAPage() {
           Back to Command Center
         </Link>
 
-        <div className="mt-6 flex items-baseline gap-3">
-          {/* Same 3px×14px rail used on the home page's category bands —
-              keeps the visual language consistent and signals which
-              category this detail page belongs to. */}
+        <div className="mt-6 flex items-center gap-3">
+          {/* Eyebrow tinted with the Short category accent so the page
+              wears its category identity in the shared mono voice. */}
+          <div className="flex flex-col">
+            <div
+              className="cc-eyebrow"
+              style={{ ["--terracotta-hover" as never]: ACCENT } as React.CSSProperties}
+            >
+              Short · Pipeline Map
+            </div>
+            <h1 className="mt-1.5 text-[40px] font-semibold leading-none tracking-[-0.025em] text-[#edeae0]">
+              L1 Q&amp;A
+              <span style={{ color: ACCENT }}>.</span>
+            </h1>
+          </div>
+          {/* "Planning" reads as an idle/neutral status — render it as the
+              shared idle status pill rather than a category-tinted chip,
+              since nothing is running yet. */}
           <span
-            aria-hidden
-            className="h-[18px] w-[3px] rounded-sm"
-            style={{ backgroundColor: ACCENT }}
-          />
-          <h1 className="text-[28px] font-semibold leading-none tracking-tight text-[var(--overview-fg)]">
-            L1 Q&amp;A
-          </h1>
-          <span
-            className="rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.18em]"
+            className="self-end rounded-full px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-[0.18em]"
             style={{
-              color: ACCENT,
-              backgroundColor: `${ACCENT}1f`, // ~12% accent tint
+              color: "var(--pill-idle-fg)",
+              backgroundColor: "var(--pill-idle-bg)",
             }}
           >
             Planning
@@ -128,7 +134,7 @@ export default function L1QAPage() {
         <p className="mt-2 text-[13px] text-white/55">
           Visual map of the planned automation. Nothing here is wired up
           yet — edit{" "}
-          <code className="rounded bg-white/[0.06] px-1 py-0.5 text-[11px] text-white/75">
+          <code className="rounded bg-white/[0.06] px-1 py-0.5 font-mono text-[11px] text-white/75">
             dashboard/src/app/l1-qa/page.tsx
           </code>{" "}
           to refine the flow.
@@ -137,16 +143,12 @@ export default function L1QAPage() {
 
       {/* The pipeline canvas itself. flex-row on wide screens, flex-col on
           narrow ones — chevron connectors rotate accordingly via the
-          `rotate-90 md:rotate-0` class on each connector. The outer
-          wrapper has a subtle inset border so the diagram reads as a
-          dedicated surface rather than floating directly on the page
-          background. */}
+          `rotate-90 md:rotate-0` class on each connector. Wrapped in the
+          shared .cc-surface so the diagram reads as a dedicated card surface
+          rather than floating directly on the page background. */}
       <section
-        className="rounded-2xl p-6 md:p-8"
-        style={{
-          backgroundColor: "var(--card-warm-bg)",
-          border: "0.5px solid var(--card-warm-border)",
-        }}
+        className="cc-surface p-6 cc-reveal md:p-8"
+        style={{ animationDelay: "0.06s" }}
       >
         <div className="flex flex-col items-stretch gap-4 md:flex-row md:items-stretch md:gap-2">
           {STAGES.map((stage, i) => (
@@ -185,16 +187,19 @@ function Stage({
   // reads card→arrow→card→arrow→card.
   return (
     <>
+      {/* Each stage is an interactive cc-surface tile — the hover lift +
+          left accent rail (driven by --accent-rail) give the diagram the
+          same depth language as the home page cards. The rail carries the
+          Short category accent. */}
       <div
-        className="flex flex-1 flex-col gap-4 rounded-xl p-5 transition-colors"
-        style={{
-          backgroundColor: "rgba(255,255,255,0.025)",
-          border: "0.5px solid rgba(255,255,255,0.06)",
-        }}
+        className="cc-surface cc-surface--interactive flex flex-1 flex-col gap-4 p-5"
+        style={{ ["--accent-rail" as never]: ACCENT } as React.CSSProperties}
       >
         <div className="flex items-center justify-between">
+          {/* Step index in the shared mono eyebrow voice, tinted with the
+              category accent. */}
           <span
-            className="text-[10px] font-medium uppercase tracking-[0.2em]"
+            className="font-mono text-[10px] font-medium uppercase tracking-[0.2em]"
             style={{ color: ACCENT }}
           >
             Step {step}

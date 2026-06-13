@@ -68,27 +68,36 @@ export default async function LeilaLinkedInDesignPage() {
 
   return (
     <AppShell>
-      <div className="mb-6">
+      {/* Page header — mono eyebrow over a large tracked title with a
+          terracotta period, matching the refined terracotta detail-page
+          voice. Revealed first, before the tool itself. */}
+      <div className="cc-reveal mb-8" style={{ animationDelay: "0s" }}>
         <Link
           href="/leila/linkedin"
-          className="mb-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          className="mb-5 inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-white/40 transition-colors hover:text-white/70"
         >
           <ArrowLeftIcon className="size-3.5" />
           Back to Leila — LinkedIn
         </Link>
         <div>
-          <h1 className="text-xl font-semibold">Graphics Design Sandbox</h1>
-          <p className="text-sm text-muted-foreground">
+          <div className="cc-eyebrow mb-1.5">Template Sandbox</div>
+          <h1 className="text-[40px] font-semibold leading-none tracking-[-0.025em] text-[#edeae0]">
+            Graphics Design
+            <span style={{ color: "var(--terracotta)" }}>.</span>
+          </h1>
+          <p className="mt-2 text-sm text-white/55">
             Iterate on the quote-card template for Leila&apos;s LinkedIn —
             tweak knobs, watch the preview, copy the config when ready.
           </p>
         </div>
       </div>
 
-      <LeilaLinkedInDesignTool
-        initialConfig={startingConfig}
-        defaultHeaderImageDataUrl={defaultHeaderDataUrl}
-      />
+      <div className="cc-reveal" style={{ animationDelay: "0.06s" }}>
+        <LeilaLinkedInDesignTool
+          initialConfig={startingConfig}
+          defaultHeaderImageDataUrl={defaultHeaderDataUrl}
+        />
+      </div>
     </AppShell>
   );
 }

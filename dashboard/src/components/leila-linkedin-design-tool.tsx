@@ -223,14 +223,20 @@ export function LeilaLinkedInDesignTool({
             rows={4}
             className="font-mono text-[12px]"
           />
-          <div className="flex flex-wrap gap-1.5 mt-2">
+          {/* Sample-text presets — small mono chips on a panel surface that
+              warm to a soft terracotta wash on hover (the accent affordance
+              for "this is selectable"). */}
+          <div className="flex flex-wrap gap-1.5 mt-2.5">
             {SAMPLE_TWEETS.map((s, i) => (
               <button
                 key={i}
                 type="button"
                 onClick={() => setText(s)}
-                className="text-[10px] px-2 py-1 rounded-md border text-[var(--overview-fg)]/65 hover:text-[var(--overview-fg)] hover:bg-white/5 transition-colors"
-                style={{ borderColor: "var(--card-warm-border)" }}
+                className="rounded-full border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-white/65 transition-colors hover:border-[var(--terracotta)] hover:bg-[var(--terracotta-soft)] hover:text-[#edeae0]"
+                style={{
+                  backgroundColor: "var(--surface-bg)",
+                  borderColor: "var(--surface-border)",
+                }}
               >
                 Sample {i + 1}
               </button>
@@ -248,7 +254,7 @@ export function LeilaLinkedInDesignTool({
               onChange={(v) => patch("accentColor", v)}
             />
           </div>
-          <p className="text-[10px] text-[var(--overview-fg)]/40 mt-2 leading-relaxed">
+          <p className="text-[10px] text-white/40 mt-2 leading-relaxed">
             Background and text are locked at #000000 / #ffffff. Accent
             stays editable.
           </p>
@@ -295,7 +301,7 @@ export function LeilaLinkedInDesignTool({
               onChange={(v) => patch("paragraphSpacing", v)}
             />
             <div className="flex flex-col gap-1.5">
-              <Label className="text-[10px] uppercase tracking-[0.14em] text-[var(--overview-fg)]/55">
+              <Label className="font-mono text-[10px] uppercase tracking-[0.14em] text-white/55">
                 Text align
               </Label>
               <Select
@@ -389,14 +395,14 @@ export function LeilaLinkedInDesignTool({
                   the preview only. The cron will keep using the on-disk
                   default until a creator-scoped header is wired in. */}
               <div className="flex flex-col gap-2">
-                <Label className="text-[10px] uppercase tracking-[0.14em] text-[var(--overview-fg)]/55">
+                <Label className="font-mono text-[10px] uppercase tracking-[0.14em] text-white/55">
                   Header image
                 </Label>
                 <div className="flex items-center gap-3">
                   {headerImageDataUrl ? (
                     <div
                       className="size-14 rounded-md border overflow-hidden bg-black/40 shrink-0"
-                      style={{ borderColor: "var(--card-warm-border)" }}
+                      style={{ borderColor: "var(--surface-border)" }}
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
@@ -407,8 +413,8 @@ export function LeilaLinkedInDesignTool({
                     </div>
                   ) : (
                     <div
-                      className="size-14 rounded-md border flex items-center justify-center text-[10px] text-[var(--overview-fg)]/40 shrink-0"
-                      style={{ borderColor: "var(--card-warm-border)" }}
+                      className="size-14 rounded-md border flex items-center justify-center text-[10px] text-white/40 shrink-0"
+                      style={{ borderColor: "var(--surface-border)" }}
                     >
                       missing
                     </div>
@@ -438,7 +444,7 @@ export function LeilaLinkedInDesignTool({
                         </Button>
                       )}
                     </div>
-                    <span className="text-[11px] text-[var(--overview-fg)]/55 truncate">
+                    <span className="text-[11px] text-white/55 truncate">
                       {isUsingCustomHeader
                         ? `Custom: ${headerImageName}`
                         : "Default: Leila_Header.png (matches what the cron renders)"}
@@ -455,7 +461,7 @@ export function LeilaLinkedInDesignTool({
                 {headerError && (
                   <p className="text-[11px] text-red-400">{headerError}</p>
                 )}
-                <p className="text-[10px] text-[var(--overview-fg)]/40 leading-relaxed">
+                <p className="text-[10px] text-white/40 leading-relaxed">
                   Preview-only. PNG/JPEG/WebP/GIF, max 5MB. Uploaded image
                   isn&apos;t stored anywhere — it lives in your browser
                   until you clear it or refresh the page.
@@ -476,7 +482,7 @@ export function LeilaLinkedInDesignTool({
           {config.showAccentBar && (
             <div className="grid grid-cols-2 gap-3">
               <div className="flex flex-col gap-1.5">
-                <Label className="text-[10px] uppercase tracking-[0.14em] text-[var(--overview-fg)]/55">
+                <Label className="font-mono text-[10px] uppercase tracking-[0.14em] text-white/55">
                   Position
                 </Label>
                 <Select
@@ -534,12 +540,19 @@ export function LeilaLinkedInDesignTool({
       </div>
 
       {/* ── Right: live preview ───────────────────────────────────────── */}
-      <div className="space-y-3">
+      {/* Sticks while scrolling the (taller) control column so the render
+          stays in view. Eyebrow + live pip signal "this updates as you
+          edit". */}
+      <div className="space-y-3 lg:sticky lg:top-20 lg:self-start">
+        <div className="flex items-center gap-2">
+          <span className="cc-pip cc-pip--live" aria-hidden />
+          <span className="cc-eyebrow">Live Preview</span>
+        </div>
         <div
-          className="aspect-square rounded-xl border overflow-hidden relative"
+          className="aspect-square overflow-hidden relative rounded-xl border"
           style={{
-            backgroundColor: "var(--card-warm-bg)",
-            borderColor: "var(--card-warm-border)",
+            backgroundColor: "var(--surface-bg)",
+            borderColor: "var(--surface-border)",
           }}
         >
           {previewSrc ? (
@@ -550,22 +563,28 @@ export function LeilaLinkedInDesignTool({
               className="w-full h-full object-contain"
             />
           ) : (
-            <div className="absolute inset-0 flex items-center justify-center text-[12px] text-[var(--overview-fg)]/45">
+            <div className="absolute inset-0 flex items-center justify-center font-mono text-[12px] text-white/45">
               {previewError ? `Error: ${previewError}` : "Rendering…"}
             </div>
           )}
           {previewLoading && previewSrc && (
-            <div className="absolute top-2 right-2 inline-flex items-center gap-1.5 rounded-md bg-black/60 px-2 py-1 text-[10px] text-white">
+            <div
+              className="absolute top-2 right-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-white/85"
+              style={{
+                backgroundColor: "var(--surface-raised)",
+                border: "1px solid var(--surface-border-hi)",
+              }}
+            >
               <LoaderIcon className="size-3 animate-spin" />
               Rendering
             </div>
           )}
         </div>
-        <p className="text-[11px] text-[var(--overview-fg)]/45 leading-relaxed">
+        <p className="text-[11px] leading-relaxed text-white/45">
           Preview is live (debounced 250ms). Output is the same{" "}
           <code className="font-mono">renderSquareQuoteCard</code> the cron
           uses, so what you see here matches what Buffer would receive.{" "}
-          <span className="text-[var(--overview-fg)]/65">
+          <span className="text-white/65">
             Three things are locked in production:
           </span>{" "}
           background <code>#000000</code>, text <code>#ffffff</code>, and
@@ -588,15 +607,12 @@ function Section({
   title: string;
   children: React.ReactNode;
 }) {
+  // Control panel — shares the elevated card language (top-lit gradient +
+  // warm border) via .cc-surface instead of a hand-rolled bg/border. The
+  // title uses the section-heading voice (mono-tracked uppercase).
   return (
-    <div
-      className="rounded-xl border px-4 py-3"
-      style={{
-        backgroundColor: "var(--card-warm-bg)",
-        borderColor: "var(--card-warm-border)",
-      }}
-    >
-      <div className="text-[10px] font-medium tracking-[0.18em] uppercase text-[var(--overview-fg)]/55 mb-3">
+    <div className="cc-surface px-4 py-3.5">
+      <div className="mb-3 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-white/55">
         {title}
       </div>
       {children}
@@ -621,7 +637,7 @@ function NumberField({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <Label className="text-[10px] uppercase tracking-[0.14em] text-[var(--overview-fg)]/55">
+      <Label className="font-mono text-[10px] uppercase tracking-[0.14em] text-white/55">
         {label}
       </Label>
       <Input
@@ -651,7 +667,7 @@ function ColorField({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <Label className="text-[10px] uppercase tracking-[0.14em] text-[var(--overview-fg)]/55">
+      <Label className="font-mono text-[10px] uppercase tracking-[0.14em] text-white/55">
         {label}
       </Label>
       <div className="flex items-center gap-2">
@@ -660,7 +676,7 @@ function ColorField({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           className="h-9 w-9 rounded-md border cursor-pointer"
-          style={{ borderColor: "var(--card-warm-border)" }}
+          style={{ borderColor: "var(--surface-border)" }}
         />
         <Input
           type="text"
@@ -678,9 +694,9 @@ function ColorField({
 function LockedColorField({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-1.5 opacity-70">
-      <Label className="text-[10px] uppercase tracking-[0.14em] text-[var(--overview-fg)]/55">
+      <Label className="font-mono text-[10px] uppercase tracking-[0.14em] text-white/55">
         {label}
-        <span className="ml-1 text-[9px] tracking-wider text-[var(--overview-fg)]/35">
+        <span className="ml-1 text-[9px] tracking-wider text-white/35">
           (locked)
         </span>
       </Label>
@@ -690,7 +706,7 @@ function LockedColorField({ label, value }: { label: string; value: string }) {
           className="h-9 w-9 rounded-md border"
           style={{
             backgroundColor: value,
-            borderColor: "var(--card-warm-border)",
+            borderColor: "var(--surface-border)",
           }}
         />
         <Input

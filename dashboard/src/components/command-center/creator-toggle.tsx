@@ -56,8 +56,12 @@ export function CreatorToggle({ current }: CreatorToggleProps) {
     <div
       role="tablist"
       aria-label="Creator"
-      className="inline-flex items-center rounded-full border border-white/[0.08] bg-white/[0.02] p-0.5"
-      style={{ opacity: isPending ? 0.7 : 1 }}
+      className="inline-flex items-center rounded-full border p-1"
+      style={{
+        opacity: isPending ? 0.7 : 1,
+        borderColor: "var(--surface-border)",
+        backgroundColor: "#1d1712",
+      }}
     >
       {CREATORS.map((c) => {
         const isActive = c.key === current;
@@ -68,10 +72,15 @@ export function CreatorToggle({ current }: CreatorToggleProps) {
             role="tab"
             aria-selected={isActive}
             onClick={() => setCreator(c.key)}
-            className={
+            className="rounded-full px-[22px] py-2 text-[13px] font-semibold transition-colors"
+            style={
               isActive
-                ? "rounded-full bg-[#fafafa] px-3.5 py-1 text-[12px] font-medium text-[#09090b] transition-colors"
-                : "rounded-full px-3.5 py-1 text-[12px] text-white/55 transition-colors hover:text-white/85"
+                ? {
+                    backgroundColor: "var(--terracotta)",
+                    color: "#fff",
+                    boxShadow: "0 4px 16px rgba(174,86,48,0.35)",
+                  }
+                : { color: "rgba(237,234,224,0.58)" }
             }
           >
             {c.label}

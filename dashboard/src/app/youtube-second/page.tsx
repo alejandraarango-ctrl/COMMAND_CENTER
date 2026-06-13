@@ -64,8 +64,16 @@ function StatusBadge({ status }: { status: string }) {
     return <Badge variant="secondary">scheduled</Badge>;
   }
   if (status === "published") {
+    // Published → the shared "ok" pill (green) tokens, replacing the old
+    // ad-hoc sage hex so it matches every other ok-state surface.
     return (
-      <Badge className="bg-[#8ca082]/15 text-[#8ca082] border-[#8ca082]/25">
+      <Badge
+        className="border-transparent"
+        style={{
+          backgroundColor: "var(--pill-ok-bg)",
+          color: "var(--pill-ok-fg)",
+        }}
+      >
         published
       </Badge>
     );
@@ -130,37 +138,61 @@ export default async function YouTubePage() {
 
   return (
     <AppShell>
-      <div className="mb-6">
+      {/* Page header — staggered reveal, mono eyebrow + large tracked title
+          with the terracotta period and platform glyph. */}
+      <div className="mb-8 cc-reveal">
         <Link
           href="/"
-          className="mb-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          className="mb-5 inline-flex items-center gap-1.5 text-sm text-white/55 hover:text-foreground transition-colors"
         >
           <ArrowLeftIcon className="size-3.5" />
           Back to Overview
         </Link>
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <PlatformIcon platform="youtube" className="size-8" />
-            <div>
-              <h1 className="text-xl font-semibold">YouTube</h1>
-              <p className="text-sm text-muted-foreground">
-                Drafts discovered in Studio and scheduled into canonical slots
-              </p>
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <div className="cc-eyebrow mb-2">Platform · Studio-scheduled</div>
+            <div className="flex items-center gap-3">
+              <PlatformIcon platform="youtube" className="size-9" />
+              <div>
+                <h1 className="text-[40px] font-semibold leading-none tracking-[-0.025em] text-[#edeae0]">
+                  YouTube<span className="text-[var(--terracotta)]">.</span>
+                </h1>
+                <p className="mt-2.5 text-sm text-white/55">
+                  Drafts discovered in Studio and scheduled into canonical slots
+                </p>
+              </div>
             </div>
           </div>
           <RunYouTubeCronButton />
         </div>
       </div>
 
-      <div className="mb-4 flex items-center gap-3">
-        <Badge variant="outline">{posts.length} total</Badge>
+      {/* Summary counts. The "published" pill uses the shared ok tokens; the
+          tabular spans keep the figures from jittering as counts update. */}
+      <div
+        className="mb-4 cc-reveal flex items-center gap-3"
+        style={{ animationDelay: "0.06s" } as React.CSSProperties}
+      >
+        <Badge variant="outline" className="tabular">
+          {posts.length} total
+        </Badge>
         <Separator orientation="vertical" className="h-4" />
-        <Badge variant="secondary">{scheduledCount} scheduled</Badge>
-        <Badge className="bg-[#8ca082]/15 text-[#8ca082] border-[#8ca082]/25">
+        <Badge variant="secondary" className="tabular">
+          {scheduledCount} scheduled
+        </Badge>
+        <Badge
+          className="border-transparent tabular"
+          style={{
+            backgroundColor: "var(--pill-ok-bg)",
+            color: "var(--pill-ok-fg)",
+          }}
+        >
           {publishedCount} published
         </Badge>
         {failedCount > 0 && (
-          <Badge variant="destructive">{failedCount} failed</Badge>
+          <Badge variant="destructive" className="tabular">
+            {failedCount} failed
+          </Badge>
         )}
       </div>
 
@@ -172,7 +204,10 @@ export default async function YouTubePage() {
         </Card>
       )}
 
-      <Card className="overflow-hidden">
+      <Card
+        className="overflow-hidden cc-reveal"
+        style={{ animationDelay: "0.12s" } as React.CSSProperties}
+      >
         <Table>
           <TableHeader>
             <TableRow className="border-border hover:bg-transparent">
@@ -203,7 +238,7 @@ export default async function YouTubePage() {
                 : null;
               return (
                 <TableRow key={post.id} className="border-border align-top">
-                  <TableCell className="whitespace-nowrap text-muted-foreground">
+                  <TableCell className="whitespace-nowrap font-mono tabular text-muted-foreground">
                     {formatCreatedAt(post.created_at)}
                   </TableCell>
                   <TableCell className="max-w-xs">
@@ -221,8 +256,15 @@ export default async function YouTubePage() {
                           {trackKind === "asr" ? "ASR" : trackKind}
                         </span>
                       )}
+                      {/* Fallback = needs review → warn pill tokens. */}
                       {isFallback && (
-                        <Badge className="bg-[#d97706]/15 text-[#d97706] border-[#d97706]/25 text-[10px] font-normal">
+                        <Badge
+                          className="border-transparent text-[10px] font-normal"
+                          style={{
+                            backgroundColor: "var(--pill-warn-bg)",
+                            color: "var(--pill-warn-fg)",
+                          }}
+                        >
                           {fallbackSkipCount
                             ? `fallback — skipped ${fallbackSkipCount}×`
                             : "fallback"}
@@ -231,9 +273,9 @@ export default async function YouTubePage() {
                     </div>
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
-                    <div className="font-mono text-xs">{publish.utc}</div>
+                    <div className="font-mono tabular text-xs">{publish.utc}</div>
                     {publish.pt && (
-                      <div className="text-[11px] text-muted-foreground">
+                      <div className="font-mono tabular text-[11px] text-muted-foreground">
                         {publish.pt}
                       </div>
                     )}

@@ -9,7 +9,6 @@
 import { getSupabaseClient } from "@/lib/supabase";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
@@ -37,18 +36,39 @@ const PLATFORM_INITIALS: Record<string, string> = {
   threads: "TH",
 };
 
+// Status → pill token mapping. We drive the pill colors entirely off the
+// design-system pill-* CSS variables (see globals.css) rather than
+// hand-rolled hex, so published/scheduled/failed read consistently with
+// the rest of the warm dark surface:
+//   published → ok (green wash)
+//   failed / buffer_error → warn (red wash)
+//   everything else (scheduled, queued, …) → idle (neutral)
 function StatusBadge({ status }: { status: string }) {
-  if (status === "published") {
-    return (
-      <Badge className="bg-[#8ca082]/15 text-[#8ca082] border-[#8ca082]/25">
-        published
-      </Badge>
-    );
-  }
-  if (status === "failed") {
-    return <Badge variant="destructive">failed</Badge>;
-  }
-  return <Badge variant="secondary">{status}</Badge>;
+  const isOk = status === "published";
+  const isWarn = status === "failed" || status === "buffer_error";
+
+  // Pick the matching pill token pair. The font-mono + uppercase voice
+  // matches the eyebrow/label treatment used across the design system.
+  const tokens = isOk
+    ? { bg: "var(--pill-ok-bg)", fg: "var(--pill-ok-fg)" }
+    : isWarn
+      ? { bg: "var(--pill-warn-bg)", fg: "var(--pill-warn-fg)" }
+      : { bg: "var(--pill-idle-bg)", fg: "var(--pill-idle-fg)" };
+
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em]"
+      style={{ backgroundColor: tokens.bg, color: tokens.fg }}
+    >
+      {/* A small pip echoes the pill color so status reads at a glance even
+          before the label is parsed. */}
+      <span
+        className="h-1.5 w-1.5 rounded-full"
+        style={{ backgroundColor: tokens.fg }}
+      />
+      {status}
+    </span>
+  );
 }
 
 type Post = {
@@ -73,37 +93,59 @@ function isManualUpload(post: Post) {
 
 function PostsTable({ posts }: { posts: Post[] }) {
   return (
+    // The shadcn Card is already restyled to the warm gradient surface, so
+    // the table just needs to read cleanly on top of it. We override the
+    // header/row borders to the design-system surface-border token (the
+    // default `border-border` resolves to the same value, but referencing
+    // the token directly keeps the intent explicit on this warm surface).
     <Card className="overflow-hidden">
       <Table>
         <TableHeader>
-          <TableRow className="border-border hover:bg-transparent">
-            <TableHead>Platform</TableHead>
-            <TableHead>Title / Caption</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Published</TableHead>
+          <TableRow
+            className="hover:bg-transparent"
+            style={{ borderColor: "var(--surface-border)" }}
+          >
+            {/* Column headers use the mono eyebrow voice (uppercase, tracked,
+                faint) so they sit quietly above the data rows. */}
+            {["Platform", "Title / Caption", "Status", "Published"].map((h) => (
+              <TableHead
+                key={h}
+                className="font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-white/40"
+              >
+                {h}
+              </TableHead>
+            ))}
             <TableHead className="w-[50px]" />
           </TableRow>
         </TableHeader>
         <StaggeredTableBody>
           {posts.map((post) => (
-            <StaggeredTableRow key={post.id} className="border-border">
+            // Rows inherit the component's border-border (≈ surface-border)
+            // and warm to the raised surface on hover via the built-in
+            // hover:bg-muted/50 → --muted token. No per-row overrides needed.
+            <StaggeredTableRow key={post.id}>
               <TableCell>
                 <div className="flex items-center gap-2">
                   <Avatar size="sm">
-                    <AvatarFallback className="text-[10px] font-bold">
+                    <AvatarFallback className="font-mono text-[10px] font-bold">
                       {PLATFORM_INITIALS[post.platform] || "?"}
                     </AvatarFallback>
                   </Avatar>
-                  <span className="capitalize">{post.platform}</span>
+                  <span className="capitalize text-[#edeae0]">
+                    {post.platform}
+                  </span>
                 </div>
               </TableCell>
-              <TableCell className="max-w-xs truncate">
+              <TableCell className="max-w-xs truncate text-white/55">
                 {post.title || post.caption || "-"}
               </TableCell>
               <TableCell>
                 <StatusBadge status={post.status} />
               </TableCell>
-              <TableCell>
+              {/* Dates get tabular numerals so the column doesn't jitter as
+                  digit widths vary row to row. font-mono + faint text keeps
+                  it as supporting metadata. */}
+              <TableCell className="tabular font-mono text-[12px] text-white/55">
                 {post.published_at
                   ? new Date(post.published_at).toLocaleDateString()
                   : "-"}
@@ -133,7 +175,7 @@ function PostsTable({ posts }: { posts: Post[] }) {
             <TableRow>
               <TableCell
                 colSpan={5}
-                className="h-24 text-center text-muted-foreground"
+                className="h-24 text-center font-mono text-[12px] uppercase tracking-[0.12em] text-white/40"
               >
                 No posts found.
               </TableCell>
@@ -168,31 +210,61 @@ export default async function PostsPage() {
 
   return (
     <AppShell>
-      <div className="mb-6">
-        <h2 className="text-lg font-medium">Posts</h2>
-        <p className="text-sm text-muted-foreground">
+      {/* Page header — eyebrow + big display title pattern from the design
+          system. Staggered reveal blocks give the page a calm entrance. */}
+      <div className="cc-reveal mb-8">
+        <div className="cc-eyebrow mb-2">Publishing Log</div>
+        <h2 className="text-[40px] font-semibold leading-none tracking-[-0.025em] text-[#edeae0]">
+          Posts
+          <span style={{ color: "var(--terracotta)" }}>.</span>
+        </h2>
+        <p className="mt-3 text-sm text-white/55">
           Manage posts across all platforms
         </p>
       </div>
 
-      {/* Summary badges */}
-      <div className="flex items-center gap-3 mb-4">
-        <Badge variant="outline">{posts.length} total</Badge>
-        <Separator orientation="vertical" className="h-4" />
-        <Badge className="bg-[#8ca082]/15 text-[#8ca082] border-[#8ca082]/25">
-          {published.length} published
-        </Badge>
-        <Badge variant="destructive">{failed.length} failed</Badge>
+      {/* Summary counts — mono labels with tabular numerals so the figures
+          line up and read as instrument-panel stats rather than chips.
+          Each count is tinted with its matching pill foreground token. */}
+      <div
+        className="cc-reveal mb-6 flex items-center gap-4 font-mono text-[12px]"
+        style={{ animationDelay: "0.06s" }}
+      >
+        <span className="text-white/55">
+          <span className="tabular font-semibold text-[#edeae0]">
+            {posts.length}
+          </span>{" "}
+          total
+        </span>
+        <Separator
+          orientation="vertical"
+          className="h-4"
+          style={{ backgroundColor: "var(--surface-border)" }}
+        />
+        <span style={{ color: "var(--pill-ok-fg)" }}>
+          <span className="tabular font-semibold">{published.length}</span>{" "}
+          published
+        </span>
+        <span style={{ color: "var(--pill-warn-fg)" }}>
+          <span className="tabular font-semibold">{failed.length}</span> failed
+        </span>
       </div>
 
       {/* Workflow tabs */}
-      <Tabs defaultValue="all">
+      <Tabs
+        defaultValue="all"
+        className="cc-reveal"
+        style={{ animationDelay: "0.12s" }}
+      >
+        {/* The default TabsList bg resolves to --muted (warm surface-raised),
+            so the tabs already sit on the right tone; the active tab picks up
+            --background per the shadcn dark styles. */}
         <TabsList>
           <TabsTrigger value="all">All</TabsTrigger>
           <TabsTrigger value="manual">
             Manual Upload
             {manualPosts.length > 0 && (
-              <span className="ml-1.5 rounded-full bg-white/10 px-1.5 py-0.5 text-[10px]">
+              <span className="tabular ml-1.5 rounded-full bg-white/10 px-1.5 py-0.5 font-mono text-[10px]">
                 {manualPosts.length}
               </span>
             )}
@@ -200,7 +272,7 @@ export default async function PostsPage() {
           <TabsTrigger value="pipeline">
             Pipeline
             {pipelinePosts.length > 0 && (
-              <span className="ml-1.5 rounded-full bg-white/10 px-1.5 py-0.5 text-[10px]">
+              <span className="tabular ml-1.5 rounded-full bg-white/10 px-1.5 py-0.5 font-mono text-[10px]">
                 {pipelinePosts.length}
               </span>
             )}

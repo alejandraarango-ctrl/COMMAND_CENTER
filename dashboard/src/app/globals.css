@@ -129,12 +129,46 @@
   --terracotta: #ae5630;
   --terracotta-deep: #8e4220;
   --terracotta-hover: #c4683f;
+  --terracotta-soft: rgba(174, 86, 48, 0.14);
   --overview-bg: #18130f;
   --overview-fg: #edeae0;
   --card-warm-bg: #231d18;
   --card-warm-border: rgba(255, 255, 255, 0.06);
   --drawer-bg: rgba(0, 0, 0, 0.22);
   --drawer-border: rgba(255, 255, 255, 0.04);
+
+  /* ── Refined-terracotta design system (v2) ──────────────────────────
+     A coherent set of surface, border, glow, and status tokens so every
+     page shares the same elevated language. Components reference these
+     (or the .cc-* utility classes below) instead of hand-rolling hex +
+     alpha values inline, which is what let the look drift before. */
+
+  /* Surfaces: cards are a subtle top-lit gradient, not a flat fill — the
+     gradient + warm border is what reads as "depth" rather than "box". */
+  --surface-bg: #211a15;            /* page panels / inputs */
+  /* Card gradient — matched 1-to-1 to the refined-terracotta mock
+     (#231d18 → #1d1712). With the grain overlay no longer using
+     mix-blend (see .app-atmosphere below), these read as distinct tiles
+     against the #18130f page bg without needing to be artificially
+     lightened. */
+  --surface-card-top: #231d18;      /* card gradient — lighter top edge */
+  --surface-card-bottom: #1d1712;   /* card gradient — settles toward the bg */
+  --surface-raised: #2a221d;        /* hover / popover / elevated chrome */
+  --surface-border: rgba(255, 255, 255, 0.07);
+  --surface-border-hi: rgba(255, 255, 255, 0.12);
+
+  /* Depth: the lift shadow on hover and the warm ambient glow. */
+  --shadow-lift: 0 18px 44px -22px rgba(0, 0, 0, 0.78);
+  --shadow-card: 0 1px 0 0 rgba(255, 255, 255, 0.03) inset;
+  --glow-terra: 0 6px 22px -8px rgba(174, 86, 48, 0.45);
+
+  /* Status pill palette — tuned to sit calmly on the warm dark surface. */
+  --pill-ok-bg: rgba(34, 197, 94, 0.12);
+  --pill-ok-fg: #5fe39a;
+  --pill-warn-bg: rgba(239, 68, 68, 0.13);
+  --pill-warn-fg: #ff7a7a;
+  --pill-idle-bg: rgba(237, 234, 224, 0.06);
+  --pill-idle-fg: rgba(237, 234, 224, 0.55);
 }
 
 /* Overview page animations.
@@ -208,14 +242,180 @@
   }
 }
 
+/* ── Refined-terracotta utilities ───────────────────────────────────────
+   Shared building blocks for the v2 look. Kept as utility classes (not
+   per-component CSS) because the same surface/eyebrow/rule treatment
+   repeats across the home page, AppShell, and every detail page — one
+   definition keeps them in lockstep. */
+
+/* Ambient atmosphere — applied once at the app root (see layout.tsx) so
+   EVERY page, not just the home page, gets the warm radial wash + a fine
+   film grain. The grain is an inline SVG turbulence (no asset request). */
+.app-atmosphere {
+  position: fixed;
+  inset: 0;
+  z-index: -10;
+  pointer-events: none;
+  /* Radial wash matched to the mock: a stronger warm glow top-right and a
+     faint one bottom-left. */
+  background-image:
+    radial-gradient(90% 60% at 80% -5%, rgba(174, 86, 48, 0.16), transparent 55%),
+    radial-gradient(70% 50% at 0% 100%, rgba(174, 86, 48, 0.07), transparent 60%);
+}
+.app-atmosphere::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  /* Plain film grain (no mix-blend) — overlay blending was lifting the
+     surrounding bg and washing out card contrast; the mock uses a flat
+     low-opacity grain, so we match that. */
+  opacity: 0.5;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+}
+
+/* The core card surface: top-lit gradient + warm border + radius, with a
+   calm lift on hover. Add `.cc-surface--interactive` for the hover lift
+   and a left accent bar (drive the bar color with `--accent-rail`). */
+.cc-surface {
+  background: linear-gradient(180deg, var(--surface-card-top), var(--surface-card-bottom));
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-card);
+}
+.cc-surface--interactive {
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.25s cubic-bezier(0.2, 0.7, 0.2, 1),
+    border-color 0.25s ease, box-shadow 0.25s ease;
+}
+.cc-surface--interactive::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 3px;
+  background: var(--accent-rail, var(--terracotta));
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+.cc-surface--interactive:hover {
+  transform: translateY(-3px);
+  border-color: var(--surface-border-hi);
+  box-shadow: var(--shadow-lift);
+}
+.cc-surface--interactive:hover::before {
+  opacity: 0.9;
+}
+
+/* Mono eyebrow — the small tracked label that sits above titles and on
+   section rails. The single source of truth for that voice. */
+.cc-eyebrow {
+  font-family: var(--font-geist-mono);
+  font-size: 11px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--terracotta-hover);
+}
+
+/* Animated category rule — a faint tinted line with a slow highlight
+   sweep, signalling "this section is live". Color via `--rule-color`. */
+.cc-rule {
+  position: relative;
+  flex: 1;
+  height: 1px;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.cc-rule::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, var(--rule-color, #fff), transparent);
+  opacity: 0.22;
+}
+.cc-rule::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 38%;
+  background: linear-gradient(90deg, transparent, var(--rule-color, #fff), transparent);
+  opacity: 0.5;
+  animation: cc-rule-sweep 6s ease-in-out infinite;
+}
+@keyframes cc-rule-sweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(360%); }
+}
+
+/* Live status pip — small dot with an outward ping, for "this is running". */
+.cc-pip {
+  position: relative;
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--pip-color, var(--terracotta));
+}
+.cc-pip--live::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--pip-color, var(--terracotta));
+  animation: cc-ping 2.4s ease-out infinite;
+}
+@keyframes cc-ping {
+  0% { transform: scale(1); opacity: 0.6; }
+  70%, 100% { transform: scale(3); opacity: 0; }
+}
+
+/* Staggered entrance — set `animation-delay` inline per item. */
+.cc-reveal {
+  opacity: 0;
+  transform: translateY(10px);
+  animation: cc-rise 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+}
+@keyframes cc-rise {
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cc-rule::after,
+  .cc-pip--live::after,
+  .cc-reveal {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .cc-surface--interactive,
+  .cc-surface--interactive:hover {
+    transition-duration: 0ms !important;
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
   body {
     @apply bg-background text-foreground;
+    /* Refined body voice — DM Sans with a hair of negative tracking and
+       grayscale antialiasing reads cleaner on the warm dark surface. */
+    letter-spacing: -0.005em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
   html {
     @apply font-sans;
+  }
+  /* Tabular figures wherever numbers carry meaning (counts, tables, time)
+     so digits don't jitter as values update. */
+  .tabular,
+  th,
+  td {
+    font-variant-numeric: tabular-nums;
   }
 }

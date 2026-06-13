@@ -52,19 +52,26 @@ export default async function LeilaLinkedInPage() {
 
   return (
     <AppShell>
-      <div className="mb-6">
+      {/* Page header — staggered reveal, mono eyebrow above a large
+          tracked title with a terracotta period, matching the refined
+          terracotta voice used across detail pages. */}
+      <div className="cc-reveal mb-8" style={{ animationDelay: "0s" }}>
         <Link
           href="/"
-          className="mb-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          className="mb-5 inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-white/40 transition-colors hover:text-white/70"
         >
           <ArrowLeftIcon className="size-3.5" />
           Back to Overview
         </Link>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3.5">
           <PlatformIcon platform="linkedin" className="size-8" />
           <div>
-            <h1 className="text-xl font-semibold">Leila — LinkedIn</h1>
-            <p className="text-sm text-muted-foreground">
+            <div className="cc-eyebrow mb-1.5">Leila Pathway</div>
+            <h1 className="text-[40px] font-semibold leading-none tracking-[-0.025em] text-[#edeae0]">
+              LinkedIn
+              <span style={{ color: "var(--terracotta)" }}>.</span>
+            </h1>
+            <p className="mt-2 text-sm text-white/55">
               Quote-card images from recent @LeilaHormozi tweets
             </p>
           </div>
@@ -72,60 +79,74 @@ export default async function LeilaLinkedInPage() {
       </div>
 
       {/* Run cadence + flow notes — kept inline (not split into its own
-          component) because nothing else on the page needs them. */}
-      <div className="mb-5 rounded-lg border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-xs text-[var(--overview-fg)]/65">
+          component) because nothing else on the page needs them. Now a
+          cc-surface so it shares the elevated card language. */}
+      <div
+        className="cc-reveal cc-surface mb-5 px-5 py-4 text-xs text-white/65"
+        style={{ animationDelay: "0.06s" }}
+      >
         <div className="flex flex-wrap gap-x-6 gap-y-1.5">
           <span>
-            <span className="text-[var(--overview-fg)]/40">Schedule</span>{" "}
-            <span className="font-mono">Daily · 11:45 UTC (4:45 AM PDT)</span>
+            <span className="font-mono uppercase tracking-[0.14em] text-white/40">
+              Schedule
+            </span>{" "}
+            <span className="font-mono tabular">Daily · 11:45 UTC (4:45 AM PDT)</span>
           </span>
           <span>
-            <span className="text-[var(--overview-fg)]/40">Source</span>{" "}
+            <span className="font-mono uppercase tracking-[0.14em] text-white/40">
+              Source
+            </span>{" "}
             <span className="font-mono">@LeilaHormozi via Apify</span>
           </span>
           <span>
-            <span className="text-[var(--overview-fg)]/40">Channel</span>{" "}
+            <span className="font-mono uppercase tracking-[0.14em] text-white/40">
+              Channel
+            </span>{" "}
             <span className="font-mono">Buffer · LinkedIn (Leila)</span>
           </span>
         </div>
-        <p className="mt-2 text-[var(--overview-fg)]/45">
+        <p className="mt-2.5 text-white/45">
           Three sequential phases in one cron invocation (<code className="font-mono">content_apify</code>,{" "}
           <code className="font-mono">content_generate</code>, <code className="font-mono">buffer_send</code>).
           Renders 1080×1080 quote cards using Alex&apos;s Facebook template — no Leila-specific template yet.
         </p>
       </div>
 
-      <PathwayCard
-        number={1}
-        title="X → LinkedIn Quote Card"
-        steps={[
-          "Primary: scrape up to 5 recent @LeilaHormozi tweets from past 24h via Apify",
-          "Wide fallback (only when primary returns 0): scrape up to 30 tweets ignoring time window (1-year lookback), pick exactly 1 fresh tweet — guarantees a post on quiet days",
-          "Skip any whose source tweet text already exists in linkedin_leila posts (dedup)",
-          "Render each as a 1080×1080 PNG quote card via /api/content-gen and upload to linkedin_leila/tweet-{uuid}.png",
-          "Queue to Buffer's Leila LinkedIn channel with caption \"Agree?\"",
-        ]}
-        actions={[{ url: "/api/cron/run", body: { job: "linkedin-leila-cron" } }]}
-        lastRun={lastRun}
-      />
+      {/* PathwayCard is a shared command-center component (already styled in
+          the refined terracotta language); wrapped in a reveal so it joins
+          the staggered entrance. */}
+      <div className="cc-reveal" style={{ animationDelay: "0.12s" }}>
+        <PathwayCard
+          number={1}
+          title="X → LinkedIn Quote Card"
+          steps={[
+            "Primary: scrape up to 5 recent @LeilaHormozi tweets from past 24h via Apify",
+            "Wide fallback (only when primary returns 0): scrape up to 30 tweets ignoring time window (1-year lookback), pick exactly 1 fresh tweet — guarantees a post on quiet days",
+            "Skip any whose source tweet text already exists in linkedin_leila posts (dedup)",
+            "Render each as a 1080×1080 PNG quote card via /api/content-gen and upload to linkedin_leila/tweet-{uuid}.png",
+            "Queue to Buffer's Leila LinkedIn channel with caption \"Agree?\"",
+          ]}
+          actions={[{ url: "/api/cron/run", body: { job: "linkedin-leila-cron" } }]}
+          lastRun={lastRun}
+        />
+      </div>
 
       {/* Sandbox entry point. Background/text/header are now locked in
           the cron path; this page survives as a preview tool for any
-          further visual iteration the operator wants to do. */}
+          further visual iteration the operator wants to do. Uses the
+          interactive cc-surface so it gets the hover lift + terracotta
+          accent rail on hover. */}
       <Link
         href="/leila/linkedin/design"
-        className="group mt-4 flex items-center justify-between gap-3 rounded-xl border px-5 py-4 transition-colors hover:bg-white/[0.02]"
-        style={{
-          backgroundColor: "var(--card-warm-bg)",
-          borderColor: "var(--card-warm-border)",
-        }}
+        className="cc-reveal cc-surface cc-surface--interactive group mt-4 flex items-center justify-between gap-3 px-5 py-4"
+        style={{ animationDelay: "0.18s" } as React.CSSProperties}
       >
         <div className="flex items-center gap-3 min-w-0">
           <span
             className="inline-flex items-center justify-center h-9 w-9 rounded-lg border shrink-0"
             style={{
-              backgroundColor: "rgba(174,86,48,0.09)",
-              borderColor: "rgba(174,86,48,0.19)",
+              backgroundColor: "var(--terracotta-soft)",
+              borderColor: "var(--surface-border-hi)",
             }}
           >
             <PaletteIcon
@@ -134,16 +155,16 @@ export default async function LeilaLinkedInPage() {
             />
           </span>
           <div className="min-w-0">
-            <div className="text-[14px] font-medium text-[var(--overview-fg)]">
+            <div className="text-[14px] font-medium text-[#edeae0]">
               Graphics design sandbox
             </div>
-            <div className="text-[12px] text-[var(--overview-fg)]/55">
+            <div className="text-[12px] text-white/55">
               Preview the locked-in Leila design (black bg, white text,
               Leila_Header.png) and experiment with other knobs.
             </div>
           </div>
         </div>
-        <span className="text-[var(--overview-fg)]/40 group-hover:text-[var(--overview-fg)]/70 transition-colors text-[18px]">
+        <span className="text-[18px] text-white/40 transition-colors group-hover:text-white/70">
           →
         </span>
       </Link>

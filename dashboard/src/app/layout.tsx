@@ -14,10 +14,13 @@ import "./globals.css";
 
 /* Humanist UI sans + mono for numeric/technical data — picked up everywhere
    via Tailwind's `font-sans` / `font-mono` classes (see --font-geist-* in
-   globals.css which now prefer these variables). */
+   globals.css which now prefer these variables).
+
+   The 700 weight is added for the refined-terracotta display headings
+   (page titles, big counts); 400–600 still cover body and UI chrome. */
 const dmSans = DM_Sans({
   subsets: ["latin"],
-  weight: ["400", "500", "600"],
+  weight: ["400", "500", "600", "700"],
   variable: "--font-dm",
 });
 const jetBrainsMono = JetBrains_Mono({
@@ -42,6 +45,13 @@ export default function RootLayout({
       className={`dark h-full antialiased ${dmSans.variable} ${jetBrainsMono.variable}`}
     >
       <body className="min-h-full bg-background text-foreground">
+        {/* Ambient atmosphere for the whole app — warm terracotta radial
+            wash + a fine film grain, rendered once behind every page so
+            the refined look is consistent on routes that don't use
+            AppShell (sign-in, etc.) as well as those that do. Defined in
+            globals.css (.app-atmosphere); fixed + -z-10 so it never
+            intercepts clicks or scrolls with the content. */}
+        <div aria-hidden className="app-atmosphere" />
         <ClerkProvider appearance={{ baseTheme: dark }}>
           <TooltipProvider delay={300}>
             {children}

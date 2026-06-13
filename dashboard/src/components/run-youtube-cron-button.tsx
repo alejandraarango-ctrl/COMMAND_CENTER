@@ -85,14 +85,27 @@ export function RunYouTubeCronButton() {
             <DialogTitle className="flex items-center gap-2">
               <PlayIcon className="size-4" />
               YouTube cron
+              {/* Status flags use the shared pill foreground tokens (ok =
+                  green, warn = red) and render the duration in mono+tabular
+                  so the elapsed seconds read as a measured figure. */}
               {status === "success" && (
-                <span className="text-xs font-normal text-[#8ca082]">
-                  · Success{durationMs != null && ` · ${(durationMs / 1000).toFixed(1)}s`}
+                <span className="text-xs font-normal text-[var(--pill-ok-fg)]">
+                  · Success
+                  {durationMs != null && (
+                    <span className="font-mono tabular">
+                      {" "}· {(durationMs / 1000).toFixed(1)}s
+                    </span>
+                  )}
                 </span>
               )}
               {status === "failed" && (
-                <span className="text-xs font-normal text-red-500">
-                  · Failed{durationMs != null && ` · ${(durationMs / 1000).toFixed(1)}s`}
+                <span className="text-xs font-normal text-[var(--pill-warn-fg)]">
+                  · Failed
+                  {durationMs != null && (
+                    <span className="font-mono tabular">
+                      {" "}· {(durationMs / 1000).toFixed(1)}s
+                    </span>
+                  )}
                 </span>
               )}
               {running && (
@@ -115,8 +128,17 @@ export function RunYouTubeCronButton() {
             </div>
           )}
 
+          {/* Raw cron log — sits on the recessed surface panel with a warm
+              border so it reads as an inset terminal rather than a black
+              hole punched in the dialog. */}
           {output && (
-            <pre className="text-[11px] bg-black/30 rounded p-2 overflow-x-auto max-h-[60vh] whitespace-pre-wrap font-mono leading-relaxed">
+            <pre
+              className="text-[11px] rounded-lg border p-2.5 overflow-x-auto max-h-[60vh] whitespace-pre-wrap font-mono leading-relaxed"
+              style={{
+                backgroundColor: "var(--surface-bg)",
+                borderColor: "var(--surface-border)",
+              }}
+            >
               {output}
             </pre>
           )}

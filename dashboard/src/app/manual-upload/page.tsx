@@ -29,29 +29,41 @@ export const dynamic = "force-dynamic";
 export default function ManualUploadPage() {
   return (
     <AppShell>
-      <div className="mb-6">
+      {/* Page header — staggered reveal, mono eyebrow over a large tracked
+          title (with the signature terracotta period), matching the refined
+          terracotta language used across detail pages. */}
+      <div className="mb-10 cc-reveal">
         <Link
           href="/"
-          className="mb-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          className="mb-5 inline-flex items-center gap-1.5 text-sm text-white/55 hover:text-foreground transition-colors"
         >
           <ArrowLeftIcon className="size-3.5" />
           Back to Command Center
         </Link>
         <div>
-          <h1 className="text-xl font-semibold">Manual upload</h1>
-          <p className="text-sm text-muted-foreground">
-            TikTok + YouTube Shorts + X (via Twitter bridge) — fan out the
-            same mp4 to all three Buffer channels. Titles, captions, and
-            scheduling are generated automatically.
+          <div className="cc-eyebrow mb-2">Reposts · Multi-platform</div>
+          <h1 className="text-[40px] font-semibold leading-none tracking-[-0.025em] text-[#edeae0]">
+            Manual upload<span className="text-[var(--terracotta)]">.</span>
+          </h1>
+          <p className="mt-3 max-w-2xl text-sm text-white/55">
+            TikTok + YouTube Shorts + X (via Twitter bridge) — fan out the same
+            mp4 to all three Buffer channels. Titles, captions, and scheduling
+            are generated automatically.
           </p>
         </div>
       </div>
 
       {/* Batch auto-schedule: drop a folder of mp4s; title + caption are
-          generated from each video's transcript and fanned out automatically. */}
-      <section>
-        <h2 className="mb-1 text-sm font-semibold">Batch auto-schedule</h2>
-        <p className="mb-4 text-sm text-muted-foreground">
+          generated from each video's transcript and fanned out automatically.
+          Staggered ~0.06s after the header. */}
+      <section
+        className="cc-reveal"
+        style={{ animationDelay: "0.06s" } as React.CSSProperties}
+      >
+        <h2 className="text-[13px] font-semibold uppercase tracking-[0.18em] text-[#edeae0]">
+          Batch auto-schedule
+        </h2>
+        <p className="mb-5 mt-1.5 max-w-2xl text-sm text-white/55">
           Drag in a batch of videos. Each one is transcribed, gets an
           auto-generated title and a caption matched from the tweet bank, then
           is scheduled to TikTok + YouTube Shorts + X via Buffer.
