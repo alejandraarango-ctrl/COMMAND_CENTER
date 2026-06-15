@@ -54,11 +54,12 @@ logger = logging.getLogger(__name__)
 # migration 20260412105433_rls_and_dedup.sql fires.
 _PG_UNIQUE_VIOLATION = "23505"
 
-# Hardcoded engagement hook — same caption every leg uses on every
-# platform today. Lives here (instead of as a per-platform constant)
-# because it's identical across TikTok/FB/LI and the unified pipelines
-# treat it as a single string.
-BUFFER_CAPTION = "Agree?"
+# Visible Buffer caption every leg uses on every platform today. Lives
+# here (instead of as a per-platform constant) because it's identical
+# across TikTok/FB/LI/IG and the unified pipelines treat it as a single
+# string. Intentionally blank: the tweet text is already rendered onto
+# the card/reel, so the published post ships with no caption text.
+BUFFER_CAPTION = ""
 
 
 def instagram_card_format() -> str:
@@ -69,7 +70,7 @@ def instagram_card_format() -> str:
 
       - 'video' (default): Instagram ships the SAME 9:16 / 5-second / silent
         MP4 that TikTok gets — reused byte-for-byte from the TikTok render —
-        posted as a *reel* with caption BUFFER_CAPTION ("Agree?").
+        posted as a *reel* with caption BUFFER_CAPTION (currently blank).
       - 'image': legacy behaviour — a 1080×1440 portrait PNG feed *post* with
         no caption (the tweet text is already rendered onto the card).
 
@@ -211,8 +212,8 @@ def send_leg(
     stores (for dedup against the partial-unique index on
     (platform, md5(caption))). `buffer_body` is what Buffer actually publishes
     as the visible caption on the social platform — defaults to BUFFER_CAPTION
-    ("Agree?") but can be overridden per-platform (e.g. `""` for Instagram,
-    which publishes tweet card images with no caption text).
+    (currently blank) and can be overridden per-platform; every leg publishes
+    with no caption text today (the tweet text is already rendered on the card).
 
     Mirrors the insert-first-then-send pattern that the deleted FB/LI
     pipelines used: we attempt the DB insert first so the partial-unique
@@ -281,7 +282,7 @@ def send_leg(
         # buffer_body is what Buffer publishes — never the tweet text.
         # The tweet text is already rendered onto the image and would
         # duplicate visually if sent again. Defaults to BUFFER_CAPTION
-        # ("Agree?") but Instagram passes "" for a caption-free post.
+        # (currently blank), so every leg ships a caption-free post.
         buffer_post_id = send_to_buffer(
             channel_id, buffer_body, media_url,
             media_type=media_type,
@@ -362,8 +363,8 @@ def fanout_extra_legs_for_one_tweet(
                    (see instagram_card_format()):
                      * 'video' (default) → tiktok_storage_path: reuses the
                        TikTok 1080×1920 MP4 byte-for-byte (same 9:16 / 5-sec
-                       / silent reel), shipped as an IG *reel* with the
-                       "Agree?" caption. No separate IG render.
+                       / silent reel), shipped as an IG *reel* with a
+                       blank caption. No separate IG render.
                      * 'image' → ig_storage_path (1080×1440 PNG, IG's own
                        render from a dedicated template row), shipped as a
                        caption-free feed *post*.
@@ -422,8 +423,11 @@ def fanout_extra_legs_for_one_tweet(
             # 'instagram' platform name alone can't tell send_leg which
             # one this run is using.
             media_type="video" if ig_video else "image",
-            # The reel ships the "Agree?" hook; the legacy image ships no
-            # caption (the tweet text is already rendered onto the card).
+            # Both formats ship a blank caption (the tweet text is already
+            # rendered onto the card/reel). BUFFER_CAPTION is "" today, so
+            # the two branches are equivalent — kept explicit so flipping
+            # the constant back to a hook wouldn't accidentally caption the
+            # legacy image post.
             buffer_body=BUFFER_CAPTION if ig_video else "",
             # Buffer's IG integration needs metadata.instagram.type. 'reel'
             # routes a vertical video to the Reels tab (send_to_buffer also
