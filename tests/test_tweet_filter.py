@@ -13,7 +13,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from core.tweet_filter import is_postable_tweet
+from core.tweet_filter import is_postable_tweet, is_retweet
 
 
 def _mock_client_returning(text: str) -> MagicMock:
@@ -119,6 +119,37 @@ class TestRegexStage:
         client = MagicMock()
         keep, reason = is_postable_tweet("RT @x: hi", client=client)
         assert reason == "retweet"
+
+
+class TestIsRetweet:
+    """`is_retweet` — the narrow retweet-only check the Threads crosspost
+    pipeline uses. Unlike `is_postable_tweet`, it flags ONLY the `RT @`
+    prefix and leaves links/short/truncated tweets alone."""
+
+    def test_retweet_prefix(self):
+        assert is_retweet("RT @AlexHormozi: great point about pricing") is True
+
+    def test_case_insensitive(self):
+        assert is_retweet("rt @x: lower-case retweet prefix") is True
+
+    def test_leading_whitespace(self):
+        assert is_retweet("  RT @y: leading whitespace before prefix") is True
+
+    def test_normal_tweet_kept(self):
+        assert is_retweet("Hire slow, fire fast.") is False
+
+    def test_rt_not_at_start_kept(self):
+        """"RT" mid-sentence or without an @ handle is not a retweet."""
+        assert is_retweet("My RT strategy is simple") is False
+
+    def test_rt_without_at_kept(self):
+        assert is_retweet("RT this if you agree") is False
+
+    def test_links_and_short_tweets_kept(self):
+        """Narrower than is_postable_tweet — these would be rejected there
+        but is_retweet leaves them alone (Threads supports them)."""
+        assert is_retweet("Read more at https://example.com") is False
+        assert is_retweet("Short.") is False
 
 
 class TestLLMStage:

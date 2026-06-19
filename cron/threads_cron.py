@@ -33,6 +33,9 @@ from core.content_sources import fetch_apify_tweets, select_bank_content
 # LLM sanity-check: rejects bank posts that are incomplete (e.g. "7 ways to
 # get rich" with no actual list) before they're inserted and queued to Buffer.
 from core.bank_post_reviewer import is_postable_bank_post
+# Cheap regex check: skips Apify-scraped retweets (the "RT @handle:" prefix)
+# so we don't repost someone else's retweeted content to Threads.
+from core.tweet_filter import is_retweet
 # Database helpers for tracking cron runs and storing data
 from core.database import (
     insert_post,
@@ -97,7 +100,16 @@ def main():
         twitter_handle = os.environ.get("APIFY_TWITTER_HANDLE", "AlexHormozi")
         tweets = fetch_apify_tweets(twitter_handle, max_items=10)
 
+        apify_skipped_retweets = 0
         for tweet in tweets:
+            # Skip retweets — we don't want to repost someone else's retweeted
+            # content to Threads. Apify returns these with an "RT @handle:"
+            # prefix in the tweet body. Checked before the dedup lookup below
+            # so we don't waste a DB round-trip on tweets we're dropping anyway.
+            if is_retweet(tweet["text"]):
+                apify_skipped_retweets += 1
+                logger.info("Skipping retweet: %.80s…", tweet["text"])
+                continue
             if post_caption_exists("threads", tweet["text"]):
                 continue
             post = Post(platform="threads", caption=tweet["text"], status="scheduled")
@@ -106,7 +118,10 @@ def main():
             apify_sourced += 1
 
         log_cron_finish(run_id, status="success", posts_processed=apify_sourced)
-        logger.info("Apify sourcing complete: %d new posts", apify_sourced)
+        logger.info(
+            "Apify sourcing complete: %d new posts (%d retweets skipped)",
+            apify_sourced, apify_skipped_retweets,
+        )
     except Exception as e:
         logger.error("Apify sourcing failed: %s", e, exc_info=True)
         log_cron_finish(run_id, status="failed", error_message=str(e))

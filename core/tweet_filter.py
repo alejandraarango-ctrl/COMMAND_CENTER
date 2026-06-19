@@ -69,6 +69,23 @@ _RETWEET_RE = re.compile(r"^\s*RT\s+@", re.IGNORECASE)
 _MIN_TWEET_CHARS = 25
 
 
+def is_retweet(text: str) -> bool:
+    """True if `text` is a retweet (starts with the `RT @` prefix as Apify
+    returns it).
+
+    Case-insensitive — some scraper versions normalize the prefix differently
+    ("Rt @" / "rt @"). Reuses the same `_RETWEET_RE` pattern as the LinkedIn
+    quote-card filter so the two pipelines agree on what counts as a retweet.
+
+    Used by the Threads crosspost pipeline (`cron/threads_cron.py`) to skip
+    reposting someone else's retweeted content. Note this is intentionally
+    narrower than `is_postable_tweet()`: it flags ONLY retweets, leaving
+    links/short/truncated tweets alone — Threads supports those, unlike the
+    1080×1080 LinkedIn quote cards this module's LLM judge was built for.
+    """
+    return bool(_RETWEET_RE.match(text.strip()))
+
+
 def _regex_reject(text: str) -> str | None:
     """Return a short reason tag if regex rejects the tweet, else None.
 
