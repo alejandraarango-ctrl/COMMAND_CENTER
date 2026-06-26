@@ -18,7 +18,7 @@
 import { execFile, spawn } from "child_process";
 import type { ChildProcessWithoutNullStreams } from "child_process";
 import { promisify } from "util";
-import { existsSync } from "fs";
+import { existsSync, readFileSync, writeFileSync } from "fs";
 import path from "path";
 
 // execFile runs a binary with an explicit argv array instead of a shell string.
@@ -40,16 +40,39 @@ let depsReady: Promise<void> | null = null;
 export function ensurePythonDeps(): Promise<void> {
   if (!depsReady) {
     depsReady = (async () => {
-      if (existsSync(depsDir)) return; // already present (Render build or prior run)
-
-      // Locally, pip is available — install on first use.
       const reqFile = path.resolve(process.cwd(), "..", "requirements.txt");
+
+      // We can't trust "python_deps/ exists" alone: a dir built against an
+      // OLDER requirements.txt is missing any newly-added package (this is how
+      // the imageio-ffmpeg ModuleNotFoundError happened — the dir predated the
+      // dep). So we stamp the requirements we last installed into a lock file
+      // and reinstall whenever it no longer matches. pip is a near-instant
+      // no-op when everything's already satisfied, so the recheck is cheap.
+      const lockFile = path.join(depsDir, ".requirements.lock");
+      let wantReqs = "";
+      try {
+        wantReqs = readFileSync(reqFile, "utf8");
+      } catch {
+        // No requirements.txt reachable (unexpected) — fall back to the old
+        // "exists is good enough" behavior so we don't loop reinstalling.
+        if (existsSync(depsDir)) return;
+      }
+      if (existsSync(depsDir) && wantReqs) {
+        const haveReqs = existsSync(lockFile)
+          ? readFileSync(lockFile, "utf8")
+          : null;
+        if (haveReqs === wantReqs) return; // up to date — nothing to install
+      }
+
+      // Locally, pip is available — install (or top up) on first use / on drift.
       try {
         await execFileAsync(
           "python3",
           ["-m", "pip", "install", `--target=${depsDir}`, "-r", reqFile],
           { timeout: 120_000 },
         );
+        // Record exactly what we installed so the next run can detect drift.
+        if (wantReqs) writeFileSync(lockFile, wantReqs);
       } catch {
         // pip unavailable (Render Node runtime) — if python_deps/ wasn't
         // created by the build phase, the spawn will fail with a clear
