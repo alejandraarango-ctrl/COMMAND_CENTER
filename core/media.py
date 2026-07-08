@@ -15,6 +15,7 @@ they don't accept arbitrary URLs. So we need this download-then-reupload step.
 from __future__ import annotations
 
 import logging
+import mimetypes
 import os
 import re
 from urllib.parse import unquote
@@ -129,11 +130,26 @@ def download_file(
 
 
 def upload_to_storage(local_path: str, storage_path: str) -> str:
-    """Upload a local file to Supabase Storage. Returns the storage path."""
+    """Upload a local file to Supabase Storage. Returns the storage path.
+
+    Sets an explicit content-type based on the file extension. Without this,
+    the storage client falls back to a generic content-type (observed as
+    text/plain in practice), which downstream consumers that fetch the file
+    by URL -- e.g. Buffer's image/video ingestion -- reject with errors like
+    "unsupported content-type: text/plain. Expected an image format."
+    """
     client = get_client()
+    content_type, _ = mimetypes.guess_type(local_path)
+    file_options = {"content-type": content_type} if content_type else None
     with open(local_path, "rb") as f:
-        client.storage.from_(STORAGE_BUCKET).upload(storage_path, f)
-    logger.info("Uploaded %s -> %s/%s", local_path, STORAGE_BUCKET, storage_path)
+        if file_options:
+            client.storage.from_(STORAGE_BUCKET).upload(storage_path, f, file_options=file_options)
+        else:
+            client.storage.from_(STORAGE_BUCKET).upload(storage_path, f)
+    logger.info(
+        "Uploaded %s -> %s/%s (content-type: %s)",
+        local_path, STORAGE_BUCKET, storage_path, content_type or "unknown",
+    )
     return storage_path
 
 

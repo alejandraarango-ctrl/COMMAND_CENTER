@@ -245,6 +245,8 @@ def send_to_buffer(
     instagram_post_type: str | None = None,
     youtube: dict | None = None,
     caption_limit: int | None = None,
+    due_at: datetime | None = None,
+    save_to_draft: bool = False,
 ) -> str:
     """Send content to Buffer's posting queue.
 
@@ -265,6 +267,16 @@ def send_to_buffer(
         caption_limit: Override the 150-char TikTok truncation. YouTube callers
             pass 5000 (descriptions) and X callers pass 280 so captions aren't
             amputated unnecessarily.
+        due_at: Schedule for this exact datetime instead of Buffer's next
+            queue slot. Sets mode=customScheduled (confirmed via schema
+            introspection: ShareMode enum values are addToQueue, shareNow,
+            shareNext, customScheduled). Naive datetimes are assumed UTC.
+        save_to_draft: If True, the post is saved as a Buffer draft instead
+            of being scheduled to actually go out -- it sits in Buffer
+            awaiting manual review/approval. Confirmed via introspection of
+            CreatePostInput (has a saveToDraft: Boolean field independent of
+            mode/schedulingType). Not yet verified end-to-end against a real
+            post -- this is exactly what we're testing.
 
     Returns:
         The Buffer post ID on success.
@@ -307,10 +319,19 @@ def send_to_buffer(
     post_input: dict = {
         "channelId": channel_id,
         "schedulingType": "automatic",
-        "mode": "addToQueue",
+        "mode": "customScheduled" if due_at else "addToQueue",
         "text": truncate_caption(caption, caption_limit or TIKTOK_CAPTION_LIMIT),
         "assets": assets,
     }
+    if due_at:
+        iso = due_at.isoformat()
+        # Buffer expects a UTC ISO-8601 timestamp; a naive datetime (no
+        # tzinfo) has no offset to include, so assume the caller meant UTC.
+        if due_at.tzinfo is None:
+            iso += "Z"
+        post_input["dueAt"] = iso
+    if save_to_draft:
+        post_input["saveToDraft"] = True
     if metadata:
         post_input["metadata"] = metadata
 

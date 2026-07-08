@@ -1,65 +1,92 @@
-"""TikTok platform adapter — UNUSED.
+"""TikTok platform adapter — posts to TikTok via Buffer's GraphQL API.
 
-TikTok publishing goes through Buffer (see core/buffer.py and
-cron/tiktok_pipeline.py). This stub is kept as reference for a future
-direct TikTok API integration if we ever need to bypass Buffer.
------------------------------------------------------------------
-Key things to know about TikTok's API:
-  - Auth uses OAuth 2.0.  You get an authorization code, exchange it for
-    an access token + refresh token.  Access tokens expire in ~24 hours;
-    refresh tokens last much longer.
-  - Video posting is a multi-step process:
-      1. Call /v2/post/publish/inbox/video/init/ to get an upload URL.
-      2. Upload the video file to that URL (chunked upload for large files).
-      3. TikTok processes the video asynchronously — you poll a status
-         endpoint until it's done.
-  - TikTok is video-first.  Photo posts (carousels) are a newer feature
-    with a separate endpoint.
-  - Metrics come from the /v2/video/query/ endpoint (views, likes, comments,
-    shares).  Access to detailed analytics requires additional scopes.
+Previously this file was an unused stub reserved for a hypothetical direct
+TikTok API integration (see git history / CLAUDE.md for that plan). Alex's
+production pipeline (cron/tiktok_pipeline.py) also bypasses this class and
+calls core/buffer.py directly inline. For Jazmin's simpler "crosspost an
+already-produced video" use case, we want the generic
+core.scheduler.process_due_posts flow to work, so this file now implements
+a real Buffer-backed adapter -- same pattern as platforms/threads.py and
+platforms/instagram.py.
 
-API docs: https://developers.tiktok.com/doc/content-posting-api-get-started
+Required env vars:
+  BUFFER_ACCESS_TOKEN  — OAuth token for Buffer's API
+  BUFFER_ORG_ID        — Buffer organization ID
 """
 
-from platforms.base import PlatformBase
+import logging
+from datetime import datetime
+
+from core.buffer import get_channel_id, send_to_buffer
+from core.exceptions import PlatformAPIError
 from core.models import MediaUploadResult, Post
+from platforms.base import PlatformBase
+
+logger = logging.getLogger(__name__)
 
 
 class TikTok(PlatformBase):
     name = "tiktok"
 
+    publishes_via_buffer = True
+
+    def __init__(self, channel_name: str | None = None) -> None:
+        self._channel_name = channel_name
+
     def validate_config(self) -> None:
-        raise NotImplementedError("TODO: port from existing repo")
+        self._check_env_vars("BUFFER_ACCESS_TOKEN", "BUFFER_ORG_ID")
 
     def refresh_credentials(self) -> None:
-        # Will call POST /v2/oauth/token/ with grant_type=refresh_token
-        # to get a new access token.  TikTok access tokens are short-lived
-        # (~24h), so the cron job needs to refresh before every run.
-        raise NotImplementedError("TODO: port from existing repo")
+        """No-op — Buffer tokens are long-lived and don't need refreshing."""
+        return
 
     def validate_credentials(self) -> bool:
-        # Will call GET /v2/user/info/ to check if the access token is
-        # still valid.  Returns True if TikTok responds with user data.
-        raise NotImplementedError("TODO: port from existing repo")
+        try:
+            get_channel_id(service="tiktok", name=self._channel_name)
+            return True
+        except Exception:
+            return False
 
     def create_post(self, post: Post) -> str:
-        # Multi-step flow:
-        # 1. Initialize the upload via /v2/post/publish/inbox/video/init/
-        # 2. Upload the video binary to the returned upload URL
-        # 3. Poll /v2/post/publish/status/fetch/ until processing completes
-        # Returns the TikTok video ID.
-        raise NotImplementedError("TODO: port from existing repo")
+        if not post.media_urls:
+            raise PlatformAPIError("TikTok post has no media_urls", status_code=400)
+        channel_id = get_channel_id(service="tiktok", name=self._channel_name)
+        media_url = post.media_urls[0]
+        media_type = post.media_type or "video"
+        caption = post.caption or post.title or ""
+        # See platforms/instagram.py for why due_at/save_to_draft come from
+        # post.metadata rather than being adapter-level config.
+        due_at = None
+        due_at_raw = (post.metadata or {}).get("due_at")
+        if due_at_raw:
+            due_at = datetime.fromisoformat(due_at_raw)
+        save_to_draft = bool((post.metadata or {}).get("save_to_draft", False))
+
+        return send_to_buffer(
+            channel_id,
+            caption,
+            media_url,
+            media_type=media_type,
+            # send_to_buffer defaults caption_limit to TikTok's 150-char cap
+            # already -- no override needed here.
+            due_at=due_at,
+            save_to_draft=save_to_draft,
+        )
+
+    def buffer_replay(self, post: Post) -> dict:
+        return {"channel_id": get_channel_id(service="tiktok", name=self._channel_name)}
 
     def upload_media(self, local_path: str, media_type: str) -> MediaUploadResult:
-        # TikTok requires uploading the video as part of the posting flow
-        # (see create_post above), so this may handle the upload step
-        # separately, or return a no-op if create_post handles it inline.
-        # For chunked uploads of large videos, this is where chunk logic
-        # would live.
-        raise NotImplementedError("TODO: port from existing repo")
+        return MediaUploadResult(
+            platform_media_id=None,
+            metadata={"note": "media sent by URL via Buffer, no local upload step"},
+        )
 
     def get_media_constraints(self) -> dict:
-        # Will return TikTok's limits: videos up to 10 min (287.6 MB via
-        # API), supported formats (mp4, webm), aspect ratio 9:16 preferred,
-        # caption max 2200 chars, etc.
-        raise NotImplementedError("TODO: port from existing repo")
+        return {
+            "max_video_duration_sec": 600,
+            "max_file_size_mb": 287,
+            "supported_video_formats": ["mp4", "webm"],
+            "aspect_ratios": ["9:16"],
+            "max_caption_length": 150,
+        }
