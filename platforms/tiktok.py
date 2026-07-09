@@ -13,6 +13,7 @@ Required env vars:
   BUFFER_ACCESS_TOKEN  — OAuth token for Buffer's API
   BUFFER_ORG_ID        — Buffer organization ID
 """
+from __future__ import annotations
 
 import logging
 from datetime import datetime

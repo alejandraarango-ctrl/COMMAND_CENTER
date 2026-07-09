@@ -1,5 +1,6 @@
 """Custom exception hierarchy for COMMAND_CENTER.
 
+from __future__ import annotations
 Why custom exceptions?
     Python's built-in exceptions (ValueError, RuntimeError, etc.) are too
     generic — if a platform API returns a 429 (rate limit), we want to handle
@@ -21,6 +22,7 @@ Why custom exceptions?
     *everything* with a single `except CommandCenterError` when you just
     want a general safety net.
 """
+from __future__ import annotations
 
 
 class CommandCenterError(Exception):
