@@ -48,6 +48,18 @@ static, not model-generated: there is no per-video customization, by
 design (the operator can still hand-edit an individual video's
 description afterward in Studio; the next scheduling run only touches
 drafts, not already-scheduled videos, so a manual edit sticks).
+
+Long-form videos
+-----------------
+Drafts whose Studio title contains the word "Long" (Jazmin's naming
+convention for long-form videos, e.g. a filename ending in "..._Long")
+are handled differently from reels: they still get a Claude-generated
+Spanish title (from the transcript) and the same fixed channel
+description, but they are never auto-published on a schedule. Instead
+they're set to Unlisted immediately via `YouTube.set_video_unlisted` and
+left that way permanently -- the operator reviews and manually flips them
+to Public in Studio whenever she's ready. No slot assignment / occupancy
+tracking applies to these (`core.youtube_slots` is short-form-only).
 """
 
 from __future__ import annotations
@@ -133,6 +145,12 @@ _VERSION_MARKER_RE = re.compile(
 _SEPARATOR_RE = re.compile(r"[_\-]+")
 _WS_RUN = re.compile(r"\s+")
 
+# Marks a draft as long-form (vs. a reel) by Jazmin's filename convention,
+# e.g. "(07-07-2026)_YouTube_El mercado en 2026_Long". Matched as a whole
+# word so "Long" inside another word (unlikely, but e.g. "Longevity")
+# doesn't false-positive.
+_LONG_VIDEO_MARKER_RE = re.compile(r"\blong\b", re.IGNORECASE)
+
 
 @dataclass
 class ScheduledOutcome:
@@ -142,6 +160,22 @@ class ScheduledOutcome:
     transcript_chars: int
     caption_track_kind: str
     publish_at_iso: str
+    title_source: Literal["generated", "fallback"]
+
+
+@dataclass
+class UnlistedOutcome:
+    """A long-form draft that was titled/described and set to Unlisted.
+
+    No `publish_at_iso` -- long-form videos are never auto-scheduled, so
+    there's no publish time to report.
+    """
+
+    video_id: str
+    original_title: str
+    generated_title: str
+    transcript_chars: int
+    caption_track_kind: str
     title_source: Literal["generated", "fallback"]
 
 
@@ -163,6 +197,7 @@ class QuotaTracker:
 @dataclass
 class Summary:
     scheduled: list[ScheduledOutcome] = field(default_factory=list)
+    unlisted: list[UnlistedOutcome] = field(default_factory=list)
     skipped: list[SkippedOutcome] = field(default_factory=list)
     quota_used: int = 0
     dry_run: bool = False
@@ -344,6 +379,7 @@ def schedule_studio_drafts(
 
     # ── Phase 2: schedule ──────────────────────────────────────────
     for draft in drafts[:max_per_run]:
+        is_long_form = bool(_LONG_VIDEO_MARKER_RE.search(draft.title))
         try:
             _schedule_one(
                 draft=draft,
@@ -355,6 +391,7 @@ def schedule_studio_drafts(
                 dry_run=dry_run,
                 quota=quota,
                 summary=summary,
+                is_long_form=is_long_form,
             )
         except SlotExhaustedError:
             logger.warning(
@@ -385,8 +422,9 @@ def schedule_studio_drafts(
 
     summary.quota_used = quota.used
     logger.info(
-        "Run complete: scheduled=%d skipped=%d quota_used=%d dry_run=%s",
+        "Run complete: scheduled=%d unlisted=%d skipped=%d quota_used=%d dry_run=%s",
         len(summary.scheduled),
+        len(summary.unlisted),
         len(summary.skipped),
         summary.quota_used,
         summary.dry_run,
@@ -405,6 +443,7 @@ def _schedule_one(
     dry_run: bool,
     quota: QuotaTracker,
     summary: Summary,
+    is_long_form: bool = False,
 ) -> None:
     # Phase 1: transcript. If the caption track is missing (common for
     # freshly uploaded drafts — ASR hasn't run yet) we normally skip the
@@ -448,21 +487,34 @@ def _schedule_one(
             "%s: fallback after %d skips — using cleaned title %r",
             draft.video_id, skip_count, cleaned,
         )
-        _finalize_schedule(
-            draft=draft,
-            client=client,
-            channel_id=channel_id,
-            now_utc=now_utc,
-            taken=taken,
-            dry_run=dry_run,
-            quota=quota,
-            summary=summary,
-            final_title=cleaned,
-            transcript_chars=0,
-            caption_track_kind="",
-            title_source="fallback",
-            fallback_skip_count=skip_count,
-        )
+        if is_long_form:
+            _finalize_unlisted(
+                draft=draft,
+                client=client,
+                dry_run=dry_run,
+                quota=quota,
+                summary=summary,
+                final_title=cleaned,
+                transcript_chars=0,
+                caption_track_kind="",
+                title_source="fallback",
+            )
+        else:
+            _finalize_schedule(
+                draft=draft,
+                client=client,
+                channel_id=channel_id,
+                now_utc=now_utc,
+                taken=taken,
+                dry_run=dry_run,
+                quota=quota,
+                summary=summary,
+                final_title=cleaned,
+                transcript_chars=0,
+                caption_track_kind="",
+                title_source="fallback",
+                fallback_skip_count=skip_count,
+            )
         return
 
     # Phase 2: title generation. Any failure here (API error, empty JSON,
@@ -481,6 +533,20 @@ def _schedule_one(
         )
         return
 
+    if is_long_form:
+        _finalize_unlisted(
+            draft=draft,
+            client=client,
+            dry_run=dry_run,
+            quota=quota,
+            summary=summary,
+            final_title=final_title,
+            transcript_chars=len(transcript.text),
+            caption_track_kind=transcript.track_kind,
+            title_source="generated",
+        )
+        return
+
     _finalize_schedule(
         draft=draft,
         client=client,
@@ -495,6 +561,109 @@ def _schedule_one(
         caption_track_kind=transcript.track_kind,
         title_source="generated",
         fallback_skip_count=None,
+    )
+
+
+def _finalize_unlisted(
+    *,
+    draft: PrivateVideo,
+    client: YouTube,
+    dry_run: bool,
+    quota: QuotaTracker,
+    summary: Summary,
+    final_title: str,
+    transcript_chars: int,
+    caption_track_kind: str,
+    title_source: Literal["generated", "fallback"],
+) -> None:
+    """Title + describe a long-form draft and set it to Unlisted (no schedule).
+
+    Long-form videos get the same Claude-generated Spanish title and the
+    same fixed channel description as reels, but are never auto-published
+    -- they're left Unlisted permanently so the operator can review and
+    publish manually whenever she's ready. No slot assignment happens
+    here (long-form videos don't compete for the reel schedule's
+    occupancy set).
+    """
+    logger.info(
+        "%s: %r → %r (unlisted, track=%s, %d chars, source=%s)",
+        draft.video_id,
+        draft.title,
+        final_title,
+        caption_track_kind or "-",
+        transcript_chars,
+        title_source,
+    )
+    if dry_run:
+        logger.info(
+            "DRY-RUN videos.update payload (unlisted): title=%r, categoryId=%r, description=<fixed>",
+            final_title,
+            draft.category_id,
+        )
+        summary.unlisted.append(
+            UnlistedOutcome(
+                video_id=draft.video_id,
+                original_title=draft.title,
+                generated_title=final_title,
+                transcript_chars=transcript_chars,
+                caption_track_kind=caption_track_kind,
+                title_source=title_source,
+            )
+        )
+        return
+
+    client.set_video_unlisted(
+        draft.video_id,
+        title=final_title,
+        category_id=draft.category_id,
+        description=_CHANNEL_DESCRIPTION,
+    )
+    quota.charge(_COST_UPDATE, reason=f"update {draft.video_id} (unlisted)")
+
+    # Mirror into the posts table so the dashboard can render it. There's
+    # no "unlisted" status in the Post model's enum, so this is recorded
+    # as "published" (the metadata write to YouTube did succeed and the
+    # video is live, just not publicly listed) with an explicit
+    # visibility marker in metadata for anything that needs to
+    # distinguish it from a fully public reel.
+    metadata: dict = {
+        "source": "studio",
+        "video_kind": "long_form",
+        "visibility": "unlisted",
+        "original_title": draft.title,
+        "generated_title": final_title,
+        "transcript_chars": transcript_chars,
+        "caption_track_kind": caption_track_kind,
+        "title_source": title_source,
+    }
+    post = Post(
+        platform="youtube",
+        platform_post_id=draft.video_id,
+        status="published",
+        title=final_title,
+        permalink=f"https://youtube.com/watch?v={draft.video_id}",
+        metadata=metadata,
+    )
+    try:
+        insert_post(post)
+    except Exception as exc:
+        # DB failure should not roll back the YouTube write — the video's
+        # title/description are set and it's Unlisted regardless. Log
+        # loudly so the operator can reconcile.
+        logger.error(
+            "YouTube unlisted-update succeeded but posts insert failed for %s: %s",
+            draft.video_id,
+            exc,
+        )
+    summary.unlisted.append(
+        UnlistedOutcome(
+            video_id=draft.video_id,
+            original_title=draft.title,
+            generated_title=final_title,
+            transcript_chars=transcript_chars,
+            caption_track_kind=caption_track_kind,
+            title_source=title_source,
+        )
     )
 
 

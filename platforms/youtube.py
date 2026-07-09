@@ -305,6 +305,47 @@ class YouTube(PlatformBase):
             )
         _raise_for_youtube_error(resp)
 
+    @with_retry()
+    def set_video_unlisted(
+        self,
+        video_id: str,
+        *,
+        title: str,
+        category_id: str,
+        description: str,
+    ) -> None:
+        """Set title/description and make a video Unlisted (no schedule).
+
+        Used for long-form videos: they get the same Claude-generated
+        title and the same fixed channel description as reels, but are
+        never auto-published on a schedule. `privacyStatus` is set to
+        "unlisted" immediately and stays that way until a human manually
+        changes visibility in Studio — no `publishAt` is sent.
+
+        Cost: 50 quota units.
+        """
+        payload = {
+            "id": video_id,
+            "snippet": {
+                "title": title,
+                "categoryId": category_id,
+                "description": description,
+            },
+            "status": {"privacyStatus": "unlisted"},
+        }
+        resp = httpx.put(
+            f"{_API_BASE}/videos",
+            params={"part": "snippet,status"},
+            json=payload,
+            headers=self._auth_headers(),
+            timeout=_REQUEST_TIMEOUT,
+        )
+        if not resp.is_success:
+            logger.error(
+                "videos.update (unlisted) rejected for %s — payload: %s", video_id, payload
+            )
+        _raise_for_youtube_error(resp)
+
     # ── Captions ─────────────────────────────────────────────────────
 
     @with_retry()
