@@ -49,17 +49,20 @@ design (the operator can still hand-edit an individual video's
 description afterward in Studio; the next scheduling run only touches
 drafts, not already-scheduled videos, so a manual edit sticks).
 
-Long-form videos
------------------
-Drafts whose Studio title contains the word "Long" (Jazmin's naming
-convention for long-form videos, e.g. a filename ending in "..._Long")
-are handled differently from reels: they still get a Claude-generated
-Spanish title (from the transcript) and the same fixed channel
-description, but they are never auto-published on a schedule. Instead
-they're set to Unlisted immediately via `YouTube.set_video_unlisted` and
-left that way permanently -- the operator reviews and manually flips them
-to Public in Studio whenever she's ready. No slot assignment / occupancy
-tracking applies to these (`core.youtube_slots` is short-form-only).
+Unlisted-only videos ("Clip" / "Long")
+---------------------------------------
+Drafts whose Studio title contains the word "Clip" or "Long" (Jazmin's
+naming convention, e.g. "DD-MM-AAAA_Clip_Titulo" or
+"DD-MM-AAAA_Long_Titulo") are handled differently from reels: they still
+get a Claude-generated Spanish title (from the transcript) and the same
+fixed channel description, but they are never auto-published on a
+schedule. Instead they're set to Unlisted immediately via
+`YouTube.set_video_unlisted` and left that way permanently -- the
+operator reviews and manually flips them to Public in Studio whenever
+she's ready. No slot assignment / occupancy tracking applies to these
+(`core.youtube_slots` is reel-only). Everything else (e.g. the
+"DD-MM-AAAA_Reel..." convention) keeps going through the normal
+schedule path.
 """
 
 from __future__ import annotations
@@ -145,11 +148,11 @@ _VERSION_MARKER_RE = re.compile(
 _SEPARATOR_RE = re.compile(r"[_\-]+")
 _WS_RUN = re.compile(r"\s+")
 
-# Marks a draft as long-form (vs. a reel) by Jazmin's filename convention,
-# e.g. "(07-07-2026)_YouTube_El mercado en 2026_Long". Matched as a whole
-# word so "Long" inside another word (unlikely, but e.g. "Longevity")
-# doesn't false-positive.
-_LONG_VIDEO_MARKER_RE = re.compile(r"\blong\b", re.IGNORECASE)
+# Marks a draft as "unlisted-only" (vs. a reel that gets auto-scheduled)
+# by Jazmin's filename convention, e.g. "07-07-2026_Clip_El mercado en
+# 2026" or "07-07-2026_Long_El mercado en 2026". Matched as whole words so
+# "Long"/"Clip" inside another word doesn't false-positive.
+_UNLISTED_MARKER_RE = re.compile(r"\b(long|clip)\b", re.IGNORECASE)
 
 
 @dataclass
@@ -379,7 +382,7 @@ def schedule_studio_drafts(
 
     # ── Phase 2: schedule ──────────────────────────────────────────
     for draft in drafts[:max_per_run]:
-        is_long_form = bool(_LONG_VIDEO_MARKER_RE.search(draft.title))
+        stays_unlisted = bool(_UNLISTED_MARKER_RE.search(draft.title))
         try:
             _schedule_one(
                 draft=draft,
@@ -391,7 +394,7 @@ def schedule_studio_drafts(
                 dry_run=dry_run,
                 quota=quota,
                 summary=summary,
-                is_long_form=is_long_form,
+                stays_unlisted=stays_unlisted,
             )
         except SlotExhaustedError:
             logger.warning(
@@ -443,7 +446,7 @@ def _schedule_one(
     dry_run: bool,
     quota: QuotaTracker,
     summary: Summary,
-    is_long_form: bool = False,
+    stays_unlisted: bool = False,
 ) -> None:
     # Phase 1: transcript. If the caption track is missing (common for
     # freshly uploaded drafts — ASR hasn't run yet) we normally skip the
@@ -487,7 +490,7 @@ def _schedule_one(
             "%s: fallback after %d skips — using cleaned title %r",
             draft.video_id, skip_count, cleaned,
         )
-        if is_long_form:
+        if stays_unlisted:
             _finalize_unlisted(
                 draft=draft,
                 client=client,
@@ -533,7 +536,7 @@ def _schedule_one(
         )
         return
 
-    if is_long_form:
+    if stays_unlisted:
         _finalize_unlisted(
             draft=draft,
             client=client,
@@ -576,14 +579,14 @@ def _finalize_unlisted(
     caption_track_kind: str,
     title_source: Literal["generated", "fallback"],
 ) -> None:
-    """Title + describe a long-form draft and set it to Unlisted (no schedule).
+    """Title + describe a "Clip"/"Long" draft and set it to Unlisted (no schedule).
 
-    Long-form videos get the same Claude-generated Spanish title and the
-    same fixed channel description as reels, but are never auto-published
-    -- they're left Unlisted permanently so the operator can review and
+    These videos get the same Claude-generated Spanish title and the same
+    fixed channel description as reels, but are never auto-published --
+    they're left Unlisted permanently so the operator can review and
     publish manually whenever she's ready. No slot assignment happens
-    here (long-form videos don't compete for the reel schedule's
-    occupancy set).
+    here (these videos don't compete for the reel schedule's occupancy
+    set).
     """
     logger.info(
         "%s: %r → %r (unlisted, track=%s, %d chars, source=%s)",
@@ -628,7 +631,7 @@ def _finalize_unlisted(
     # distinguish it from a fully public reel.
     metadata: dict = {
         "source": "studio",
-        "video_kind": "long_form",
+        "video_kind": "unlisted_only",
         "visibility": "unlisted",
         "original_title": draft.title,
         "generated_title": final_title,
