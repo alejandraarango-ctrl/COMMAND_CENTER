@@ -2,6 +2,7 @@
 
 Usage:
   python -m scripts.queue_jazmin_post /path/to/video.mp4 "Caption text here"
+  python -m scripts.queue_jazmin_post /path/to/video.mp4
   python -m scripts.queue_jazmin_post /path/to/video.mp4 --tema "como ahorrar en dolares"
 
 What it does:
@@ -11,9 +12,11 @@ What it does:
   3. Inserts a posts row + a schedules row (scheduled_for=now) for both
      "instagram" and "tiktok".
 
-Caption: pass it directly as the second argument, or pass --tema "de que
-trata el video" to have Claude (ANTHROPIC_API_KEY) sugerir un caption en
-espanol que puedes aceptar, regenerar o editar antes de continuar.
+Caption: pass it directly as the second argument, or omit it entirely --
+Claude will look at the actual video/image (extracting a few frames via
+ffmpeg for video) and write a caption suggestion in Spanish, which you can
+accept, regenerate, or edit before continuing. Pass --tema "de que trata el
+video" to give Claude extra context alongside what it sees.
 
 This is a manual stand-in for what an automated content pipeline would do
 (see cron/tiktok_pipeline.py for how Alex's automated version works).
@@ -29,9 +32,12 @@ or wait for Render to run them on their schedule (once registered).
 from __future__ import annotations
 
 import argparse
+import base64
 import os
 import re
+import subprocess
 import sys
+import tempfile
 import uuid
 from datetime import datetime, time, timezone
 
@@ -75,9 +81,58 @@ def parse_due_date(filename: str) -> datetime | None:
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".webm"}
 
+_IMAGE_MIME_TYPES = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+    ".bmp": "image/bmp",
+}
 
-def generate_caption(tema: str) -> str:
-    """Pide a Claude una sugerencia de caption en espanol para el video."""
+
+def _get_video_duration(video_path: str) -> float:
+    """Duracion del video en segundos, via ffprobe."""
+    result = subprocess.run(
+        [
+            "ffprobe", "-v", "error", "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1", video_path,
+        ],
+        capture_output=True, text=True, check=True,
+    )
+    return float(result.stdout.strip())
+
+
+def extract_video_frames(video_path: str, count: int = 5) -> list[bytes]:
+    """Extrae `count` fotogramas distribuidos a lo largo del video con ffmpeg."""
+    try:
+        duration = _get_video_duration(video_path)
+    except FileNotFoundError:
+        sys.exit(
+            "No se encontro ffmpeg/ffprobe. Instalalo con:\n"
+            "  brew install ffmpeg"
+        )
+    except (subprocess.CalledProcessError, ValueError):
+        sys.exit(f"No se pudo leer la duracion del video: {video_path}")
+
+    frames: list[bytes] = []
+    with tempfile.TemporaryDirectory() as tmpdir:
+        for i in range(count):
+            timestamp = duration * (i + 0.5) / count
+            frame_path = os.path.join(tmpdir, f"frame_{i}.jpg")
+            subprocess.run(
+                [
+                    "ffmpeg", "-y", "-ss", f"{timestamp:.2f}", "-i", video_path,
+                    "-frames:v", "1", "-q:v", "3", frame_path,
+                ],
+                capture_output=True, check=True,
+            )
+            with open(frame_path, "rb") as f:
+                frames.append(f.read())
+    return frames
+
+
+def _load_anthropic_client():
     try:
         import anthropic
     except ImportError:
@@ -85,41 +140,77 @@ def generate_caption(tema: str) -> str:
             "Falta el paquete 'anthropic'. Instalalo con:\n"
             "  pip3 install anthropic"
         )
-
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         sys.exit(
-            "ANTHROPIC_API_KEY no esta configurada en tu .env. Agregala o usa "
-            "un caption manual en vez de --tema."
+            "ANTHROPIC_API_KEY no esta configurada en tu .env. Agregala o "
+            "pasa un caption manual como segundo argumento."
         )
+    return anthropic.Anthropic(api_key=api_key)
 
-    client = anthropic.Anthropic(api_key=api_key)
-    prompt = (
-        "Escribe una descripcion (caption) corta en espanol para un Reel de "
-        "Instagram/TikTok de Jazmin Bautista, educadora financiera para "
-        "inmigrantes latinos en Estados Unidos (finanzasparamislatinos). "
-        f"El video trata sobre: {tema}. "
-        "Tono: cercano, motivador, claro, sin tecnicismos. "
-        "Incluye un gancho en la primera linea, 2-3 lineas de contexto o "
-        "valor, una llamada a la accion (seguir, comentar o guardar), y "
-        "termina con 5 a 8 hashtags relevantes en espanol e ingles. "
-        "Maximo 150 palabras. Responde unicamente con el caption, sin "
-        "explicaciones adicionales ni comillas."
+
+_CAPTION_INSTRUCTIONS = (
+    "Tono: cercano, motivador, claro, sin tecnicismos. Incluye un gancho en "
+    "la primera linea, 2-3 lineas de contexto o valor, una llamada a la "
+    "accion (seguir, comentar o guardar), y termina con 5 a 8 hashtags "
+    "relevantes en espanol e ingles. Maximo 150 palabras. Responde "
+    "unicamente con el caption, sin explicaciones adicionales ni comillas."
+)
+
+
+def generate_caption_from_media(media_path: str, media_type: str, tema: str | None = None) -> str:
+    """Analiza el video/imagen (vision) y genera una sugerencia de caption."""
+    client = _load_anthropic_client()
+
+    if media_type == "video":
+        print("Extrayendo fotogramas del video con ffmpeg...")
+        images = extract_video_frames(media_path, count=5)
+        mime_type = "image/jpeg"
+    else:
+        with open(media_path, "rb") as f:
+            images = [f.read()]
+        ext = os.path.splitext(media_path)[1].lower()
+        mime_type = _IMAGE_MIME_TYPES.get(ext, "image/jpeg")
+
+    content: list[dict] = [
+        {
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": mime_type,
+                "data": base64.standard_b64encode(img_bytes).decode("utf-8"),
+            },
+        }
+        for img_bytes in images
+    ]
+
+    instruction = (
+        "Estas viendo fotogramas de un Reel/post de Instagram y TikTok de "
+        "Jazmin Bautista, educadora financiera para inmigrantes latinos en "
+        "Estados Unidos (finanzasparamislatinos). Identifica de que trata "
+        "el contenido a partir de lo que aparece en pantalla (texto en "
+        "pantalla, graficas, escenas) y escribe una descripcion (caption) "
+        "corta en espanol para acompanarlo. "
     )
+    if tema:
+        instruction += f"Contexto adicional dado por el equipo: {tema}. "
+    instruction += _CAPTION_INSTRUCTIONS
+    content.append({"type": "text", "text": instruction})
+
+    print("Generando sugerencia de caption con Claude...")
     message = client.messages.create(
         model="claude-sonnet-4-5",
         max_tokens=400,
-        messages=[{"role": "user", "content": prompt}],
+        messages=[{"role": "user", "content": content}],
     )
     return message.content[0].text.strip()
 
 
-def prompt_for_caption(tema: str) -> str:
-    """Genera un caption con Claude y permite aceptarlo, regenerarlo o editarlo."""
+def prompt_for_caption(media_path: str, media_type: str, tema: str | None = None) -> str:
+    """Genera un caption (analizando el archivo) y permite aceptar, regenerar o editar."""
     while True:
-        print(f"\nGenerando sugerencia de caption con Claude para: {tema!r} ...\n")
-        suggestion = generate_caption(tema)
-        print("--- Sugerencia de caption ---")
+        suggestion = generate_caption_from_media(media_path, media_type, tema)
+        print("\n--- Sugerencia de caption ---")
         print(suggestion)
         print("-----------------------------")
         choice = input(
@@ -141,27 +232,17 @@ def main() -> None:
         "caption",
         nargs="?",
         default=None,
-        help="Caption text for the post (omite este argumento y usa --tema para que Claude lo sugiera)",
+        help="Caption text for the post (si se omite, Claude analiza el archivo y sugiere uno)",
     )
     parser.add_argument(
         "--tema",
         default=None,
-        help="Tema del video para que Claude sugiera el caption automaticamente",
+        help="Contexto adicional sobre el video para ayudar a Claude a generar el caption",
     )
     args = parser.parse_args()
 
     if not os.path.isfile(args.media_path):
         sys.exit(f"File not found: {args.media_path}")
-
-    if args.caption:
-        caption = args.caption
-    elif args.tema:
-        caption = prompt_for_caption(args.tema)
-    else:
-        sys.exit(
-            'Debes pasar un caption manual o --tema "de que trata el video" '
-            "para que Claude lo sugiera."
-        )
 
     ext = os.path.splitext(args.media_path)[1].lower()
     if ext in IMAGE_EXTENSIONS:
@@ -172,6 +253,11 @@ def main() -> None:
         platforms = ["instagram", "tiktok"]
     else:
         sys.exit(f"Unrecognized file type: {ext}")
+
+    if args.caption:
+        caption = args.caption
+    else:
+        caption = prompt_for_caption(args.media_path, media_type, args.tema)
 
     storage_path = f"jazmin/{uuid.uuid4().hex}{ext}"
 
