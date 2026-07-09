@@ -255,26 +255,34 @@ class YouTube(PlatformBase):
         title: str,
         category_id: str,
         publish_at_iso: str,
+        description: str | None = None,
     ) -> None:
         """Apply a scheduled publish to a Private video.
 
-        Sends `part=snippet,status` and updates only title, category, and
-        publishAt. `privacyStatus` must stay "private" — that's what lets
-        publishAt take effect; once publishAt fires, YouTube flips the
-        video to "public" automatically. Description, tags, madeForKids,
-        and other metadata are not touched (Studio settings stand).
+        Sends `part=snippet,status` and updates title, category, publishAt,
+        and (optionally) description. `privacyStatus` must stay "private" —
+        that's what lets publishAt take effect; once publishAt fires,
+        YouTube flips the video to "public" automatically. Tags,
+        madeForKids, and other metadata are not touched (Studio settings
+        stand). When `description` is omitted, YouTube keeps whatever
+        description is already set on the video (Studio default or a prior
+        manual edit).
 
         Cost: 50 quota units.
         """
+        snippet: dict = {
+            "title": title,
+            # categoryId is required when updating snippet; we echo the
+            # current value rather than overriding, so a video you
+            # manually recategorized in Studio keeps its category.
+            "categoryId": category_id,
+        }
+        if description is not None:
+            snippet["description"] = description
+
         payload = {
             "id": video_id,
-            "snippet": {
-                "title": title,
-                # categoryId is required when updating snippet; we echo the
-                # current value rather than overriding, so a video you
-                # manually recategorized in Studio keeps its category.
-                "categoryId": category_id,
-            },
+            "snippet": snippet,
             "status": {
                 "privacyStatus": "private",
                 "publishAt": publish_at_iso,

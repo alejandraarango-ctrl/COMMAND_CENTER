@@ -37,6 +37,17 @@ forever without caption tracks. Fallback rows carry
 `metadata.title_source="fallback"` so the dashboard can flag them for
 operator review. The tracker row is deleted once a draft is scheduled
 (either with a generated or a fallback title).
+
+Description
+------------
+Every video scheduled by this module gets the same fixed channel
+description (`_CHANNEL_DESCRIPTION`) applied via the same `videos.update`
+call that sets the title/schedule -- community link, Moomoo referral,
+social links, channel blurb, and the financial-advice disclaimer. This is
+static, not model-generated: there is no per-video customization, by
+design (the operator can still hand-edit an individual video's
+description afterward in Studio; the next scheduling run only touches
+drafts, not already-scheduled videos, so a manual edit sticks).
 """
 
 from __future__ import annotations
@@ -82,6 +93,33 @@ _COST_UPDATE = 50
 # a cleaned version of the original Studio title instead of skipping again.
 # Overridable via `YOUTUBE_TITLE_FALLBACK_AFTER` for tests / tuning.
 _FALLBACK_AFTER_DEFAULT = 3
+
+# Fixed description applied to every video this scheduler publishes. Kept
+# as a plain constant (not model-generated) since it's the same block on
+# every video: community/referral links, socials, channel blurb, and the
+# not-a-financial-advisor disclaimer.
+_CHANNEL_DESCRIPTION = """ÚNETE GRATIS A LA COMUNIDAD:
+Aprende a invertir paso a paso junto a otros inmigrantes latinos que quieren libertad financiera:
+👉 https://www.skool.com/inversionesparalatinos/about
+
+INVIERTE CON NOSOTROS Y RECIBE REGALO EN MOOMOO:
+Si quieres invertir con nosotros y obtener un bono de bienvenida, aquí te dejo el enlace de Moomoo con la promoción (aceptan ITIN):
+👉 https://start.moomoo.com/00mFh8
+
+SÍGUEME EN REDES SOCIALES:
+Instagram: https://www.instagram.com/jaz.min.bautista
+Facebook: https://www.facebook.com/jazmin.bautista.12382/
+TikTok: https://www.tiktok.com/@jazmin.bautistaa
+
+SOBRE ESTE CANAL:
+Si eres inmigrante latino en Estados Unidos y no creciste aprendiendo de inversiones, este canal es para ti. Comparto educación financiera sencilla, enfocada en ayudarte a entender la bolsa, invertir con criterio y construir el camino hacia tu libertad financiera.
+
+CONTACTO COMERCIAL:
+Para consultas comerciales, puedes comunicarte conmigo en:
+📩 info@finanzasparamislatinos.com
+
+DESCARGO DE RESPONSABILIDAD:
+No soy asesora financiera. La información compartida en este canal y en estos videos es solo con fines educativos y de entretenimiento. No es una recomendación personalizada de inversión ni una invitación a comprar o vender valores. Siempre investiga por tu cuenta y, si lo consideras necesario, consulta con un profesional financiero autorizado antes de tomar decisiones de inversión. Tus resultados pueden variar y toda inversión implica riesgo."""
 
 # Regex fragments for `_clean_raw_title`. Kept module-level so the
 # interpreter compiles them once per process.
@@ -490,7 +528,11 @@ def _finalize_schedule(
 
     payload_preview = {
         "id": draft.video_id,
-        "snippet": {"title": final_title, "categoryId": draft.category_id},
+        "snippet": {
+            "title": final_title,
+            "categoryId": draft.category_id,
+            "description": _CHANNEL_DESCRIPTION,
+        },
         "status": {"privacyStatus": "private", "publishAt": slot.iso},
     }
 
@@ -524,6 +566,7 @@ def _finalize_schedule(
         title=final_title,
         category_id=draft.category_id,
         publish_at_iso=slot.iso,
+        description=_CHANNEL_DESCRIPTION,
     )
     quota.charge(_COST_UPDATE, reason=f"update {draft.video_id}")
 
