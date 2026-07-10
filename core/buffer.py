@@ -37,9 +37,13 @@ class BufferRateLimitError(RuntimeError):
     the next scheduled run retry — not to keep hammering.
     """
 
-# TikTok has a 150-character caption limit. We truncate with an ellipsis (…)
-# to signal the text was cut, matching the TS version's behavior.
-TIKTOK_CAPTION_LIMIT = 150
+# TikTok's actual video-caption limit is 2200 characters (raised from an
+# older 150-char cap years ago -- Buffer's own composer enforces 2200,
+# confirmed by inspecting its character counter live). We truncate with an
+# ellipsis (…) only if a caption ever exceeds that, so a normal
+# Claude-generated caption (hook + body + CTA + hashtags, usually
+# 400-700 chars) is never cut mid-sentence.
+TIKTOK_CAPTION_LIMIT = 2200
 
 # Cache channel IDs per service for the lifetime of a single cron run.
 # Channels don't change between API calls, so one lookup per service per run
@@ -256,7 +260,7 @@ def send_to_buffer(
 
     Args:
         channel_id: Buffer channel ID (from get_channel_id).
-        caption: Post caption text (truncated to caption_limit, default 150).
+        caption: Post caption text (truncated to caption_limit, default 2200).
         media_url: Public URL of the media file (Supabase signed URL).
         media_type: 'video' or 'image' — determines Buffer asset format.
         youtube: Optional YouTube publisher metadata block (title, categoryId,
@@ -264,9 +268,9 @@ def send_to_buffer(
             optional tags). Required for the YouTube channel — Buffer rejects a
             YouTube post that's missing a category. Mirrors the YouTubeMetadata
             type in dashboard/src/lib/buffer.ts.
-        caption_limit: Override the 150-char TikTok truncation. YouTube callers
-            pass 5000 (descriptions) and X callers pass 280 so captions aren't
-            amputated unnecessarily.
+        caption_limit: Override the 2200-char TikTok truncation. YouTube
+            callers pass 5000 (descriptions) and X callers pass 280 so
+            captions aren't amputated unnecessarily.
         due_at: Schedule for this exact datetime instead of Buffer's next
             queue slot. Sets mode=customScheduled (confirmed via schema
             introspection: ShareMode enum values are addToQueue, shareNow,
@@ -479,7 +483,7 @@ def get_buffer_post_state(post_id: str) -> dict | None:
 def truncate_caption(text: str, limit: int = TIKTOK_CAPTION_LIMIT) -> str:
     """Truncate caption to TikTok's character limit with ellipsis.
 
-    TikTok's caption limit is 150 characters. If the text exceeds this,
+    TikTok's caption limit is 2200 characters. If the text exceeds this,
     we cut it and append a Unicode ellipsis (…) so the user sees it was
     truncated rather than abruptly cut off mid-word.
 
@@ -489,7 +493,7 @@ def truncate_caption(text: str, limit: int = TIKTOK_CAPTION_LIMIT) -> str:
     """
     if limit <= 0 or len(text) <= limit:
         return text
-    ellipsis = "\u2026"
+    ellipsis = "…"
     # Slice so there's room for the ellipsis, trim any trailing whitespace
     # that ended up at the cut boundary, then append. Resulting length is
     # at most `limit` characters (the ellipsis counts as one).

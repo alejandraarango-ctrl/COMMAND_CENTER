@@ -68,8 +68,8 @@ class TikTok(PlatformBase):
             caption,
             media_url,
             media_type=media_type,
-            # send_to_buffer defaults caption_limit to TikTok's 150-char cap
-            # already -- no override needed here.
+            # send_to_buffer defaults caption_limit to TikTok's real 2200-char
+            # cap already -- no override needed here.
             due_at=due_at,
             save_to_draft=save_to_draft,
         )
@@ -89,5 +89,5 @@ class TikTok(PlatformBase):
             "max_file_size_mb": 287,
             "supported_video_formats": ["mp4", "webm"],
             "aspect_ratios": ["9:16"],
-            "max_caption_length": 150,
+            "max_caption_length": 2200,
         }
