@@ -1,11 +1,16 @@
 """YouTube Data API v3 adapter — studio-first scheduling workflow.
 
-Videos are uploaded manually to YouTube Studio as Private drafts; this
-adapter discovers those drafts and applies a publish schedule via
-`videos.update`. Direct uploads through `videos.insert` are intentionally
-not supported (1600 quota units/upload, ~6 videos/day ceiling). The full
-workflow lives in `core.youtube_studio_scheduler`; this file only exposes
-the API primitives it uses.
+Videos are normally uploaded manually to YouTube Studio as Private drafts;
+this adapter discovers those drafts and applies a publish schedule via
+`videos.update`. Direct uploads through `videos.insert` (see
+`upload_video`) are used for exactly one case: cross-posting Jazmin's
+Instagram/TikTok reels to YouTube as Shorts. That's a deliberate,
+low-volume exception -- videos.insert costs 1600 quota units/upload
+regardless of file size (~6/day ceiling against the 10,000/day default
+quota), which is why the rest of this pipeline stays on the free
+Studio-upload-then-schedule path. The full studio workflow lives in
+`core.youtube_studio_scheduler`; this file only exposes the API
+primitives it (and the reel-crosspost path) use.
 
 Authentication: Google OAuth 2.0 with a long-lived refresh token in env
 vars. The refresh token needs `youtube.force-ssl` (for videos.update and
@@ -39,6 +44,9 @@ logger = logging.getLogger(__name__)
 _TOKEN_URL = "https://oauth2.googleapis.com/token"
 _API_BASE = "https://www.googleapis.com/youtube/v3"
 _REQUEST_TIMEOUT = 15.0
+# Uploading the actual video bytes (upload_video) needs much more time than
+# a metadata call -- reels are tens of MB and upstream bandwidth varies.
+_UPLOAD_TIMEOUT = 300.0
 _DEFAULT_CATEGORY_ID = "22"  # "People & Blogs" — YouTube's default for new uploads
 
 
@@ -345,6 +353,88 @@ class YouTube(PlatformBase):
                 "videos.update (unlisted) rejected for %s — payload: %s", video_id, payload
             )
         _raise_for_youtube_error(resp)
+
+    @with_retry()
+    def upload_video(
+        self,
+        local_path: str,
+        *,
+        title: str,
+        category_id: str = _DEFAULT_CATEGORY_ID,
+    ) -> str:
+        """Upload a local video file to YouTube as a Private draft (no schedule).
+
+        Used only to cross-post Jazmin's Instagram/TikTok reels as YouTube
+        Shorts (see module docstring for why this is the one place we pay
+        the 1600-unit videos.insert cost). YouTube auto-classifies a short
+        vertical video as a Short from its dimensions/duration alone -- no
+        special upload flag exists or is needed.
+
+        The video lands as a Private draft with just this placeholder
+        `title` (which should contain "Reel" so `core.youtube_studio_scheduler`
+        recognizes it on its next run). We deliberately don't set a real
+        title/description/schedule here: the very next scheduler run picks
+        up this draft exactly like a manually-Studio-uploaded reel, fetches
+        its (ASR-generated, once YouTube processes the upload) transcript,
+        and generates the real Spanish title + description + publish slot.
+        This keeps 100% of that logic in one place instead of duplicating
+        it at upload time.
+
+        Cost: ~1600 quota units (YouTube's flat videos.insert cost).
+        """
+        metadata = {
+            "snippet": {"title": title, "categoryId": category_id},
+            "status": {"privacyStatus": "private"},
+        }
+        init_resp = httpx.post(
+            "https://www.googleapis.com/upload/youtube/v3/videos",
+            params={"uploadType": "resumable", "part": "snippet,status"},
+            headers={
+                **self._auth_headers(),
+                "Content-Type": "application/json; charset=UTF-8",
+                "X-Upload-Content-Type": "video/*",
+            },
+            json=metadata,
+            timeout=_REQUEST_TIMEOUT,
+        )
+        _raise_for_youtube_error(init_resp)
+        upload_url = init_resp.headers.get("Location")
+        if not upload_url:
+            raise PlatformAPIError(
+                "YouTube did not return a resumable upload URL (missing "
+                "Location header)",
+                status_code=500,
+            )
+
+        file_size = os.path.getsize(local_path)
+        with open(local_path, "rb") as f:
+            video_bytes = f.read()
+
+        # Reels are small (tens of MB), so a single PUT of the whole file
+        # against the resumable session URI is simpler than chunking and
+        # still uses the resumable endpoint's crash-resistance. A generous
+        # timeout accounts for slow upstream bandwidth on larger files.
+        upload_resp = httpx.put(
+            upload_url,
+            content=video_bytes,
+            headers={
+                "Content-Length": str(file_size),
+                "Content-Type": "video/*",
+            },
+            timeout=_UPLOAD_TIMEOUT,
+        )
+        _raise_for_youtube_error(upload_resp)
+        video_id = upload_resp.json().get("id")
+        if not video_id:
+            raise PlatformAPIError(
+                "YouTube upload succeeded but response had no video id",
+                status_code=500,
+            )
+        logger.info(
+            "Uploaded %s to YouTube as Private draft (video_id=%s)",
+            local_path, video_id,
+        )
+        return video_id
 
     # ── Captions ─────────────────────────────────────────────────────
 

@@ -44,6 +44,7 @@ from datetime import datetime, time, timezone
 from core.database import insert_post, insert_schedule
 from core.media import get_signed_url, upload_to_storage
 from core.models import Post
+from platforms.youtube import YouTube
 
 # Matches DD-MM-YYYY at the very start of the filename, e.g.
 # "10-07-2026_reel-jazmin.mp4" -- the naming convention Jazmin uses to mark
@@ -316,6 +317,34 @@ def main() -> None:
         # reason to delay our own pickup: process it right away.
         insert_schedule(post_id, datetime.now(timezone.utc))
         print(f"Queued for {platform}: post {post_id}")
+
+    # Cross-post reels to YouTube as Shorts. Videos only (images have no
+    # Shorts equivalent) -- uploaded as a Private draft with just a
+    # placeholder title; the next run of the YouTube studio-scheduler cron
+    # picks it up, generates the real Spanish title/description from the
+    # transcript, and schedules it, exactly like a manually-Studio-uploaded
+    # reel. This costs YouTube quota (~1600 units/upload) so failures here
+    # are reported but never block the Instagram/TikTok queueing above,
+    # which already succeeded.
+    if media_type == "video":
+        placeholder_title = os.path.splitext(os.path.basename(args.media_path))[0]
+        print(f"\nSubiendo tambien a YouTube como Short (borrador Private): {placeholder_title!r} ...")
+        try:
+            yt = YouTube()
+            yt.refresh_credentials()
+            video_id = yt.upload_video(args.media_path, title=placeholder_title)
+            print(
+                f"Subido a YouTube: video {video_id}. El cron de YouTube le "
+                "pondra titulo/descripcion en espanol y lo programara en su "
+                "proxima corrida."
+            )
+        except Exception as exc:
+            print(
+                f"AVISO: no se pudo subir a YouTube ({exc}). El post de "
+                "Instagram/TikTok si quedo encolado correctamente -- puedes "
+                "subir este video a YouTube Studio manualmente si quieres "
+                "que tambien salga ahi."
+            )
 
     print("\nDone. Run the crons to publish now:")
     for platform in platforms:
