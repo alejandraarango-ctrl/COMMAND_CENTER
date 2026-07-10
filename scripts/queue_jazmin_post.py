@@ -264,8 +264,15 @@ def main() -> None:
     print(f"Uploading {args.media_path} ({media_type}) -> media/{storage_path} ...")
     upload_to_storage(args.media_path, storage_path)
 
-    media_url = get_signed_url(storage_path, expires_in=3600)
-    print(f"Signed URL (valid 1h): {media_url}")
+    # Posts sit as Buffer drafts until Alejandra manually clicks "Schedule
+    # Post" -- that can be hours or days after queuing, not the "immediate"
+    # fetch a 1-hour signed URL assumes. A short-lived URL expires before
+    # Buffer ever fetches the media, producing "Please update the media URL
+    # to be publicly accessible" errors that "Retry Now" can't fix (it
+    # retries the same dead URL). 7 days comfortably covers manual review.
+    _SIGNED_URL_TTL_SECONDS = 7 * 24 * 3600
+    media_url = get_signed_url(storage_path, expires_in=_SIGNED_URL_TTL_SECONDS)
+    print(f"Signed URL (valid 7 dias): {media_url}")
 
     due_at = parse_due_date(args.media_path)
     metadata = {"source": "jazmin_manual_queue"}
