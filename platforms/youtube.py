@@ -23,6 +23,7 @@ API docs: https://developers.google.com/youtube/v3
 from __future__ import annotations
 
 import logging
+import mimetypes
 import os
 from dataclasses import dataclass
 
@@ -46,7 +47,16 @@ _API_BASE = "https://www.googleapis.com/youtube/v3"
 _REQUEST_TIMEOUT = 15.0
 # Uploading the actual video bytes (upload_video) needs much more time than
 # a metadata call -- reels are tens of MB and upstream bandwidth varies.
+# This is now a floor, not a flat timeout -- see `upload_video`, which
+# scales it up per file size (Clip/Long uploads run up to ~1.3GB).
 _UPLOAD_TIMEOUT = 300.0
+# Hard ceiling on the size-scaled upload timeout so a truly dead
+# connection doesn't hang indefinitely on a very large file.
+_MAX_UPLOAD_TIMEOUT = 3600.0
+# Attempts for the byte-upload step (see `_upload_bytes_resumable`) --
+# each attempt after the first resumes from the last durably-received
+# byte instead of restarting, so this is cheap to keep generous.
+_UPLOAD_MAX_ATTEMPTS = 4
 _DEFAULT_CATEGORY_ID = "22"  # "People & Blogs" — YouTube's default for new uploads
 
 
@@ -314,7 +324,7 @@ class YouTube(PlatformBase):
         _raise_for_youtube_error(resp)
 
     @with_retry()
-    def set_video_unlisted(
+    def set_video_private(
         self,
         video_id: str,
         *,
@@ -322,13 +332,19 @@ class YouTube(PlatformBase):
         category_id: str,
         description: str,
     ) -> None:
-        """Set title/description and make a video Unlisted (no schedule).
+        """Set title/description and keep a video Private (no schedule).
 
-        Used for long-form videos: they get the same Claude-generated
-        title and the same fixed channel description as reels, but are
-        never auto-published on a schedule. `privacyStatus` is set to
-        "unlisted" immediately and stays that way until a human manually
-        changes visibility in Studio — no `publishAt` is sent.
+        Used for long-form videos ("Clip"/"Long"): they get the same
+        Claude-generated title and the same fixed channel description as
+        reels, but are never auto-published on a schedule. `privacyStatus`
+        is set (kept) to "private" — no `publishAt` is sent — and stays
+        that way until a human manually changes visibility in Studio.
+
+        Renamed from `set_video_unlisted` — these videos previously ended
+        up "unlisted" (viewable by anyone with the link) after titling;
+        Alejandra wants them to stay fully "private" (visible only to the
+        channel owner) until she manually publishes, same as how they sit
+        immediately after upload.
 
         Cost: 50 quota units.
         """
@@ -339,7 +355,7 @@ class YouTube(PlatformBase):
                 "categoryId": category_id,
                 "description": description,
             },
-            "status": {"privacyStatus": "unlisted"},
+            "status": {"privacyStatus": "private"},
         }
         resp = httpx.put(
             f"{_API_BASE}/videos",
@@ -350,11 +366,10 @@ class YouTube(PlatformBase):
         )
         if not resp.is_success:
             logger.error(
-                "videos.update (unlisted) rejected for %s — payload: %s", video_id, payload
+                "videos.update (private) rejected for %s — payload: %s", video_id, payload
             )
         _raise_for_youtube_error(resp)
 
-    @with_retry()
     def upload_video(
         self,
         local_path: str,
@@ -364,21 +379,28 @@ class YouTube(PlatformBase):
     ) -> str:
         """Upload a local video file to YouTube as a Private draft (no schedule).
 
-        Used only to cross-post Jazmin's Instagram/TikTok reels as YouTube
-        Shorts (see module docstring for why this is the one place we pay
-        the 1600-unit videos.insert cost). YouTube auto-classifies a short
-        vertical video as a Short from its dimensions/duration alone -- no
-        special upload flag exists or is needed.
+        Used to cross-post Jazmin's Instagram/TikTok reels as YouTube Shorts,
+        and (via `scripts/queue_youtube_video.py`) to upload "Clip"/"Long"
+        YouTube-only content -- anywhere from tens of MB (reels) up to
+        ~1.3GB (Long videos). YouTube auto-classifies a short vertical video
+        as a Short from its dimensions/duration alone -- no special upload
+        flag exists or is needed.
 
         The video lands as a Private draft with just this placeholder
-        `title` (which should contain "Reel" so `core.youtube_studio_scheduler`
-        recognizes it on its next run). We deliberately don't set a real
-        title/description/schedule here: the very next scheduler run picks
-        up this draft exactly like a manually-Studio-uploaded reel, fetches
-        its (ASR-generated, once YouTube processes the upload) transcript,
-        and generates the real Spanish title + description + publish slot.
-        This keeps 100% of that logic in one place instead of duplicating
-        it at upload time.
+        `title` (which should contain "Reel", "Clip", or "Long" so
+        `core.youtube_studio_scheduler` recognizes it on its next run). We
+        deliberately don't set a real title/description/schedule here: the
+        very next scheduler run picks up this draft, fetches its
+        (ASR-generated, once YouTube processes the upload) transcript, and
+        generates the real Spanish title + description + publish slot (or
+        keeps it Private for Clip/Long). This keeps 100% of that logic in
+        one place instead of duplicating it at upload time.
+
+        Not wrapped in `@with_retry` -- see `_upload_bytes_resumable` for
+        why: retrying this whole method would re-run the initial
+        `videos.insert` POST and create a brand-new (duplicate) video on
+        every retry. Only the byte-upload step retries, resuming the
+        existing session instead.
 
         Cost: ~1600 quota units (YouTube's flat videos.insert cost).
         """
@@ -407,34 +429,203 @@ class YouTube(PlatformBase):
             )
 
         file_size = os.path.getsize(local_path)
-        with open(local_path, "rb") as f:
-            video_bytes = f.read()
-
-        # Reels are small (tens of MB), so a single PUT of the whole file
-        # against the resumable session URI is simpler than chunking and
-        # still uses the resumable endpoint's crash-resistance. A generous
-        # timeout accounts for slow upstream bandwidth on larger files.
-        upload_resp = httpx.put(
-            upload_url,
-            content=video_bytes,
-            headers={
-                "Content-Length": str(file_size),
-                "Content-Type": "video/*",
-            },
-            timeout=_UPLOAD_TIMEOUT,
+        # Scale the timeout to file size instead of the old flat 300s,
+        # which was tuned for reels (tens of MB) and was blowing out
+        # (httpx.WriteTimeout) on real Clip/Long uploads up to ~1.3GB --
+        # a 300s budget needs >4.2MB/s sustained upstream, unrealistic on
+        # a home connection. 3s/MB gives ~50 minutes of budget per GB,
+        # capped at _MAX_UPLOAD_TIMEOUT so a truly dead connection doesn't
+        # hang forever.
+        upload_timeout = min(
+            max(_UPLOAD_TIMEOUT, (file_size / (1024 * 1024)) * 3),
+            _MAX_UPLOAD_TIMEOUT,
         )
-        _raise_for_youtube_error(upload_resp)
-        video_id = upload_resp.json().get("id")
-        if not video_id:
-            raise PlatformAPIError(
-                "YouTube upload succeeded but response had no video id",
-                status_code=500,
-            )
+        video_id = self._upload_bytes_resumable(
+            upload_url, local_path, file_size, upload_timeout
+        )
         logger.info(
             "Uploaded %s to YouTube as Private draft (video_id=%s)",
             local_path, video_id,
         )
         return video_id
+
+    def _upload_bytes_resumable(
+        self,
+        upload_url: str,
+        local_path: str,
+        file_size: int,
+        timeout: float,
+        *,
+        max_attempts: int = _UPLOAD_MAX_ATTEMPTS,
+    ) -> str:
+        """PUT video bytes to an already-created resumable session, resuming on failure.
+
+        Deliberately separate from `upload_video` and NOT decorated with
+        `@with_retry` -- that decorator retries the whole calling method,
+        which would POST a brand-new `videos.insert` session (a brand-new
+        video) on every retry. Real uploads of large Clip/Long files hit
+        exactly this: a `WriteTimeout` mid-transfer caused the old code to
+        restart from scratch each retry, and some of those restarts
+        actually finished server-side before the client gave up waiting --
+        producing multiple duplicate videos on the channel that had to be
+        deleted by hand.
+
+        Instead, on a timeout/transport error this retries against the
+        SAME `upload_url`, first asking Google how many bytes it actually
+        received (the documented resumable-upload status check: an empty
+        PUT with `Content-Range: bytes */{file_size}`, whose 308 response
+        carries a `Range` header marking the last byte durably received)
+        so the next attempt resumes from there instead of resending the
+        whole file.
+        """
+        start_byte = 0
+        last_exc: Exception | None = None
+        for attempt in range(1, max_attempts + 1):
+            try:
+                with open(local_path, "rb") as f:
+                    if start_byte:
+                        f.seek(start_byte)
+                    chunk = f.read()
+                headers = {
+                    "Content-Length": str(len(chunk)),
+                    "Content-Type": "video/*",
+                }
+                if start_byte:
+                    headers["Content-Range"] = (
+                        f"bytes {start_byte}-{file_size - 1}/{file_size}"
+                    )
+                resp = httpx.put(
+                    upload_url, content=chunk, headers=headers, timeout=timeout
+                )
+            except (httpx.TimeoutException, httpx.TransportError) as exc:
+                last_exc = exc
+                if attempt == max_attempts:
+                    break
+                resume_at, completed_video_id = self._resume_upload_after_failure(
+                    upload_url, file_size, attempt, max_attempts, exc, start_byte
+                )
+                if completed_video_id:
+                    return completed_video_id
+                start_byte = resume_at
+                continue
+            if resp.status_code in (200, 201):
+                video_id = resp.json().get("id")
+                if not video_id:
+                    raise PlatformAPIError(
+                        "YouTube upload succeeded but response had no video id",
+                        status_code=500,
+                    )
+                return video_id
+            _raise_for_youtube_error(resp)
+        raise PlatformAPIError(
+            f"Video upload failed after {max_attempts} attempts: {last_exc}",
+            status_code=599,
+        ) from last_exc
+
+    def _resume_upload_after_failure(
+        self,
+        upload_url: str,
+        file_size: int,
+        attempt: int,
+        max_attempts: int,
+        exc: Exception,
+        current_start_byte: int,
+    ) -> tuple[int, str | None]:
+        """Query resumable-upload progress after a failed attempt.
+
+        Returns `(resume_byte, completed_video_id)`. `completed_video_id`
+        is non-None only if the status check reveals the upload had
+        actually completed server-side despite the client-side error --
+        the caller should return it directly rather than retrying.
+        Otherwise falls back to `current_start_byte` (i.e. resend
+        unchanged) if the status check itself fails or returns something
+        unexpected.
+        """
+        try:
+            status = httpx.put(
+                upload_url,
+                headers={
+                    "Content-Length": "0",
+                    "Content-Range": f"bytes */{file_size}",
+                },
+                timeout=_REQUEST_TIMEOUT,
+            )
+        except httpx.HTTPError:
+            logger.warning(
+                "Upload interrupted (attempt %d/%d): %s -- status check failed too, "
+                "resending from byte %d",
+                attempt, max_attempts, exc, current_start_byte,
+            )
+            return current_start_byte, None
+
+        if status.status_code == 308:
+            resume_at = current_start_byte
+            range_header = status.headers.get("Range")
+            if range_header and "-" in range_header:
+                try:
+                    resume_at = int(range_header.rsplit("-", 1)[-1]) + 1
+                except ValueError:
+                    pass
+            logger.warning(
+                "Upload interrupted (attempt %d/%d): %s -- resuming from byte %d/%d",
+                attempt, max_attempts, exc, resume_at, file_size,
+            )
+            return resume_at, None
+
+        if status.status_code in (200, 201):
+            video_id = status.json().get("id")
+            if video_id:
+                logger.info(
+                    "Upload had actually completed server-side despite client "
+                    "timeout (video_id=%s)",
+                    video_id,
+                )
+                return current_start_byte, video_id
+
+        logger.warning(
+            "Upload interrupted (attempt %d/%d): %s -- status check returned %s, "
+            "resending from byte %d",
+            attempt, max_attempts, exc, status.status_code, current_start_byte,
+        )
+        return current_start_byte, None
+
+    @with_retry()
+    def set_thumbnail(self, video_id: str, image_path: str) -> None:
+        """Upload a custom thumbnail for a video (thumbnails.set).
+
+        YouTube caps custom thumbnails at 2MB and only accepts
+        image/jpeg, image/png, or application/octet-stream. Exported
+        Canva/design PNGs routinely land at 3-4MB, well over that limit --
+        this method raises a clear error rather than letting YouTube's own
+        (less obvious) rejection surface first. See
+        `scripts/set_youtube_thumbnail.py` for the caller that compresses
+        an oversized image before getting here.
+
+        Also requires the channel to be phone-verified for custom
+        thumbnails at all; if it isn't, YouTube's error message will say
+        so and there's nothing to fix on this end (verify the channel in
+        Studio/account settings first).
+
+        Cost: 50 quota units.
+        """
+        file_size = os.path.getsize(image_path)
+        if file_size > 2 * 1024 * 1024:
+            raise PlatformAPIError(
+                f"Thumbnail {image_path!r} is {file_size / (1024 * 1024):.1f}MB "
+                "-- YouTube's limit is 2MB. Resize/compress it first.",
+                status_code=400,
+            )
+        content_type = mimetypes.guess_type(image_path)[0] or "image/png"
+        with open(image_path, "rb") as f:
+            image_bytes = f.read()
+        resp = httpx.post(
+            "https://www.googleapis.com/upload/youtube/v3/thumbnails/set",
+            params={"videoId": video_id},
+            headers={**self._auth_headers(), "Content-Type": content_type},
+            content=image_bytes,
+            timeout=_REQUEST_TIMEOUT,
+        )
+        _raise_for_youtube_error(resp)
 
     # ── Captions ─────────────────────────────────────────────────────
 

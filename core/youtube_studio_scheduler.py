@@ -49,20 +49,26 @@ design (the operator can still hand-edit an individual video's
 description afterward in Studio; the next scheduling run only touches
 drafts, not already-scheduled videos, so a manual edit sticks).
 
-Unlisted-only videos ("Clip" / "Long")
+Private-only videos ("Clip" / "Long")
 ---------------------------------------
 Drafts whose Studio title contains the word "Clip" or "Long" (Jazmin's
 naming convention, e.g. "DD-MM-AAAA_Clip_Titulo" or
 "DD-MM-AAAA_Long_Titulo") are handled differently from reels: they still
 get a Claude-generated Spanish title (from the transcript) and the same
 fixed channel description, but they are never auto-published on a
-schedule. Instead they're set to Unlisted immediately via
-`YouTube.set_video_unlisted` and left that way permanently -- the
-operator reviews and manually flips them to Public in Studio whenever
-she's ready. No slot assignment / occupancy tracking applies to these
-(`core.youtube_slots` is reel-only). Everything else (e.g. the
-"DD-MM-AAAA_Reel..." convention) keeps going through the normal
-schedule path.
+schedule. Instead they're kept Private via `YouTube.set_video_private`
+and left that way permanently -- the operator reviews and manually flips
+them to Public in Studio whenever she's ready. No slot assignment /
+occupancy tracking applies to these (`core.youtube_slots` is reel-only).
+Everything else (e.g. the "DD-MM-AAAA_Reel..." convention) keeps going
+through the normal schedule path.
+
+Note: these videos were previously left "Unlisted" (viewable by anyone
+with the link) after titling. Changed to stay fully "Private" instead --
+the internal identifiers below (`UnlistedOutcome`, `Summary.unlisted`,
+`stays_unlisted`, `_finalize_unlisted`) keep their original names to
+avoid a wider rename across the codebase, but the actual YouTube
+`privacyStatus` they produce is now "private", not "unlisted".
 """
 
 from __future__ import annotations
@@ -150,9 +156,17 @@ _WS_RUN = re.compile(r"\s+")
 
 # Marks a draft as "unlisted-only" (vs. a reel that gets auto-scheduled)
 # by Jazmin's filename convention, e.g. "07-07-2026_Clip_El mercado en
-# 2026" or "07-07-2026_Long_El mercado en 2026". Matched as whole words so
-# "Long"/"Clip" inside another word doesn't false-positive.
-_UNLISTED_MARKER_RE = re.compile(r"\b(long|clip)\b", re.IGNORECASE)
+# 2026", "07-07-2026_Long_El mercado en 2026", or
+# "(10-07-2026)_YouTube_El mercado en 2026_Clip#03". Matched with
+# lookaround on letters only (not \b) so "Long"/"Clip" inside another word
+# doesn't false-positive (e.g. "prolonged", "Cliplong") but DOES match
+# when directly adjacent to underscores, digits, "#", or punctuation --
+# plain \b fails here because Python's regex treats "_" as a word
+# character, so "\b(long|clip)\b" never matches "..._Clip#03" or even
+# "..._Clip_..." (no boundary exists between two word characters).
+# Verified against real filenames from Jazmin's Drive folder before this
+# fix shipped -- the old regex silently matched nothing on any of them.
+_UNLISTED_MARKER_RE = re.compile(r"(?<![a-zA-Z])(long|clip)(?![a-zA-Z])", re.IGNORECASE)
 
 
 @dataclass
@@ -579,17 +593,19 @@ def _finalize_unlisted(
     caption_track_kind: str,
     title_source: Literal["generated", "fallback"],
 ) -> None:
-    """Title + describe a "Clip"/"Long" draft and set it to Unlisted (no schedule).
+    """Title + describe a "Clip"/"Long" draft and keep it Private (no schedule).
 
     These videos get the same Claude-generated Spanish title and the same
     fixed channel description as reels, but are never auto-published --
-    they're left Unlisted permanently so the operator can review and
-    publish manually whenever she's ready. No slot assignment happens
-    here (these videos don't compete for the reel schedule's occupancy
-    set).
+    they stay Private permanently so the operator can review and publish
+    manually whenever she's ready. No slot assignment happens here (these
+    videos don't compete for the reel schedule's occupancy set).
+
+    Function/parameter names here still say "unlisted" (kept to avoid a
+    wider rename), but the video's actual `privacyStatus` is "private".
     """
     logger.info(
-        "%s: %r → %r (unlisted, track=%s, %d chars, source=%s)",
+        "%s: %r → %r (private, track=%s, %d chars, source=%s)",
         draft.video_id,
         draft.title,
         final_title,
@@ -599,7 +615,7 @@ def _finalize_unlisted(
     )
     if dry_run:
         logger.info(
-            "DRY-RUN videos.update payload (unlisted): title=%r, categoryId=%r, description=<fixed>",
+            "DRY-RUN videos.update payload (private): title=%r, categoryId=%r, description=<fixed>",
             final_title,
             draft.category_id,
         )
@@ -615,24 +631,23 @@ def _finalize_unlisted(
         )
         return
 
-    client.set_video_unlisted(
+    client.set_video_private(
         draft.video_id,
         title=final_title,
         category_id=draft.category_id,
         description=_CHANNEL_DESCRIPTION,
     )
-    quota.charge(_COST_UPDATE, reason=f"update {draft.video_id} (unlisted)")
+    quota.charge(_COST_UPDATE, reason=f"update {draft.video_id} (private)")
 
     # Mirror into the posts table so the dashboard can render it. There's
-    # no "unlisted" status in the Post model's enum, so this is recorded
-    # as "published" (the metadata write to YouTube did succeed and the
-    # video is live, just not publicly listed) with an explicit
-    # visibility marker in metadata for anything that needs to
+    # no "private" status in the Post model's enum, so this is recorded
+    # as "published" (the metadata write to YouTube did succeed) with an
+    # explicit visibility marker in metadata for anything that needs to
     # distinguish it from a fully public reel.
     metadata: dict = {
         "source": "studio",
         "video_kind": "unlisted_only",
-        "visibility": "unlisted",
+        "visibility": "private",
         "original_title": draft.title,
         "generated_title": final_title,
         "transcript_chars": transcript_chars,
@@ -651,10 +666,10 @@ def _finalize_unlisted(
         insert_post(post)
     except Exception as exc:
         # DB failure should not roll back the YouTube write — the video's
-        # title/description are set and it's Unlisted regardless. Log
+        # title/description are set and it's Private regardless. Log
         # loudly so the operator can reconcile.
         logger.error(
-            "YouTube unlisted-update succeeded but posts insert failed for %s: %s",
+            "YouTube private-update succeeded but posts insert failed for %s: %s",
             draft.video_id,
             exc,
         )
