@@ -627,6 +627,91 @@ class YouTube(PlatformBase):
         )
         _raise_for_youtube_error(resp)
 
+    # ── Comments ─────────────────────────────────────────────────────
+
+    @with_retry()
+    def post_comment(self, video_id: str, text: str) -> str:
+        """Post a top-level comment on a video as the authenticated channel
+        (commentThreads.insert).
+
+        Used by `core.youtube_studio_scheduler` to auto-post the community
+        invite comment on every video it titles (Reel, Clip, or Long),
+        right after the title/description update succeeds. Posting works
+        even while the video is still Private/scheduled -- the comment is
+        just data attached to the video ID, and it becomes visible to the
+        public once the video itself goes public.
+
+        There is deliberately no API-based pinning here: YouTube's Data
+        API has no supported endpoint for pinning a comment (confirmed via
+        Google's own issue tracker) -- only the real Studio/watch-page UI
+        supports it. Pinning stays a manual, one-click step for the
+        operator after each video goes live.
+
+        Cost: 50 quota units.
+        """
+        payload = {
+            "snippet": {
+                "videoId": video_id,
+                "topLevelComment": {"snippet": {"textOriginal": text}},
+            }
+        }
+        resp = httpx.post(
+            f"{_API_BASE}/commentThreads",
+            params={"part": "snippet"},
+            json=payload,
+            headers=self._auth_headers(),
+            timeout=_REQUEST_TIMEOUT,
+        )
+        if not resp.is_success:
+            logger.error(
+                "commentThreads.insert rejected for video=%s: %s",
+                video_id, resp.text,
+            )
+        _raise_for_youtube_error(resp)
+        return resp.json().get("id", "")
+
+    # ── Playlists ────────────────────────────────────────────────────
+
+    @with_retry()
+    def add_video_to_playlist(self, video_id: str, playlist_id: str) -> None:
+        """Add a video to an existing playlist (playlistItems.insert).
+
+        Used by `core.youtube_studio_scheduler` to auto-collect "Clip"
+        videos into Jazmin's "Fragmentos de Oro Molido" playlist right
+        after they're titled. Not deduplicated on this end -- YouTube
+        allows the same video to appear in a playlist more than once
+        rather than erroring on a duplicate insert, so a caller that
+        retries this call for a video already in the playlist will just
+        create a second entry (harmless but worth avoiding upstream by
+        only calling this once per video, e.g. right after the video's
+        first-ever title/privacy update rather than on every scheduler
+        run).
+
+        Cost: 50 quota units.
+        """
+        payload = {
+            "snippet": {
+                "playlistId": playlist_id,
+                "resourceId": {
+                    "kind": "youtube#video",
+                    "videoId": video_id,
+                },
+            }
+        }
+        resp = httpx.post(
+            f"{_API_BASE}/playlistItems",
+            params={"part": "snippet"},
+            json=payload,
+            headers=self._auth_headers(),
+            timeout=_REQUEST_TIMEOUT,
+        )
+        if not resp.is_success:
+            logger.error(
+                "playlistItems.insert rejected for video=%s playlist=%s: %s",
+                video_id, playlist_id, resp.text,
+            )
+        _raise_for_youtube_error(resp)
+
     # ── Captions ─────────────────────────────────────────────────────
 
     @with_retry()
