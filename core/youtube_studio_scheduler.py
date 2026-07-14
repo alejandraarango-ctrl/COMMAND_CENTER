@@ -8,8 +8,9 @@ Studio-first cost per scheduled video:
   captions.list          50
   captions.download     200   (only on success)
   videos.update          50
+  commentThreads.insert  50   (best-effort, added for auto community comment)
   ---------------------------
-  Per-video total       ~303 (first video in run pays the +1 channels cost)
+  Per-video total       ~353 (first video in run pays the +1 channels cost)
 
 At the 10-per-run cap, a daily run uses ~3,030 units max — ~30% of quota.
 That leaves room for manual reruns or dry-run previews but no longer has
@@ -69,6 +70,24 @@ the internal identifiers below (`UnlistedOutcome`, `Summary.unlisted`,
 `stays_unlisted`, `_finalize_unlisted`) keep their original names to
 avoid a wider rename across the codebase, but the actual YouTube
 `privacyStatus` they produce is now "private", not "unlisted".
+
+Community comment (auto-posted)
+--------------------------------
+Right after the title/description update succeeds -- in both
+`_finalize_schedule` (Reels) and `_finalize_unlisted` (Clips/Longs) -- this
+module posts the same fixed community-invite comment (`_COMMUNITY_COMMENT_TEXT`)
+as a top-level comment via `YouTube.post_comment`. This is the same text
+Alejandra has been posting manually on every pipeline video. It's a
+best-effort call: a failure (comments disabled, quota, transient API
+error) is logged but never rolls back the title/schedule/private update
+that already succeeded, and is recorded as `metadata["comment_posted"]`
+on the posts-table row so the operator can spot and manually add it if
+needed.
+
+Pinning the comment is NOT automated here -- YouTube's Data API has no
+supported endpoint for pinning a comment (only the Studio/watch-page UI
+does), so pinning stays a manual, one-click step for the operator after
+each video goes live. See `YouTube.post_comment`'s docstring for details.
 """
 
 from __future__ import annotations
@@ -109,6 +128,7 @@ _COST_LIST_VIDEOS = 3  # channels (lazy) + playlistItems + videos
 _COST_LIST_CAPTIONS = 50
 _COST_DOWNLOAD_CAPTION = 200
 _COST_UPDATE = 50
+_COST_COMMENT_INSERT = 50
 
 # After this many consecutive "transcript unavailable" skips, fall back to
 # a cleaned version of the original Studio title instead of skipping again.
@@ -141,6 +161,20 @@ Para consultas comerciales, puedes comunicarte conmigo en:
 
 DESCARGO DE RESPONSABILIDAD:
 No soy asesora financiera. La información compartida en este canal y en estos videos es solo con fines educativos y de entretenimiento. No es una recomendación personalizada de inversión ni una invitación a comprar o vender valores. Siempre investiga por tu cuenta y, si lo consideras necesario, consulta con un profesional financiero autorizado antes de tomar decisiones de inversión. Tus resultados pueden variar y toda inversión implica riesgo."""
+
+# Posted as a top-level comment (via `YouTube.post_comment`) on every video
+# this scheduler titles -- Reel, Clip, or Long alike -- right after the
+# title/description update succeeds. Same fixed community-invite text
+# Alejandra has been posting manually. Best-effort: a failure here never
+# rolls back the title/schedule/private update that already succeeded.
+# Pinning has no supported API and stays a manual step (see
+# `YouTube.post_comment` docstring).
+_COMMUNITY_COMMENT_TEXT = (
+    "Holis! Si quieres aprender a invertir desde cero, en mi comunidad "
+    "tenemos clases en vivo, cursos, y te muestro lo que compro cada "
+    "semana. Todo explicado paso a paso. Aquí te puedes unir: "
+    "https://www.skool.com/inversionesparalatinos/about"
+)
 
 # Regex fragments for `_clean_raw_title`. Kept module-level so the
 # interpreter compiles them once per process.
@@ -231,6 +265,32 @@ def _fmt_publish(iso: str) -> str:
 
 def _is_quota_exceeded(exc: PlatformAPIError) -> bool:
     return exc.status_code == 403 and "quota" in str(exc).lower()
+
+
+def _post_community_comment(
+    client: YouTube, video_id: str, *, quota: QuotaTracker
+) -> bool:
+    """Best-effort: post the fixed community-invite comment on a video.
+
+    Never raises -- a comment failure (comments disabled on the video,
+    quota, transient API error) shouldn't undo the title/schedule/private
+    update that already succeeded. Returns whether it worked, so callers
+    can record it in the posts-table metadata for the operator to notice
+    and post it by hand if needed.
+    """
+    try:
+        client.post_comment(video_id, _COMMUNITY_COMMENT_TEXT)
+        quota.charge(_COST_COMMENT_INSERT, reason=f"comment {video_id}")
+        return True
+    except Exception as exc:
+        safe = client.sanitize_error(exc)
+        logger.error(
+            "%s: failed to auto-post community comment (video is still "
+            "titled correctly -- add the comment manually if you want it "
+            "there): %s",
+            video_id, safe,
+        )
+        return False
 
 
 def _fallback_after_from_env() -> int:
@@ -639,6 +699,8 @@ def _finalize_unlisted(
     )
     quota.charge(_COST_UPDATE, reason=f"update {draft.video_id} (private)")
 
+    comment_posted = _post_community_comment(client, draft.video_id, quota=quota)
+
     # Mirror into the posts table so the dashboard can render it. There's
     # no "private" status in the Post model's enum, so this is recorded
     # as "published" (the metadata write to YouTube did succeed) with an
@@ -653,6 +715,7 @@ def _finalize_unlisted(
         "transcript_chars": transcript_chars,
         "caption_track_kind": caption_track_kind,
         "title_source": title_source,
+        "comment_posted": comment_posted,
     }
     post = Post(
         platform="youtube",
@@ -767,6 +830,8 @@ def _finalize_schedule(
             draft.video_id, exc,
         )
 
+    comment_posted = _post_community_comment(client, draft.video_id, quota=quota)
+
     # Mirror the schedule into the posts table so the dashboard can render it.
     metadata: dict = {
         "source": "studio",
@@ -776,6 +841,7 @@ def _finalize_schedule(
         "transcript_chars": transcript_chars,
         "caption_track_kind": caption_track_kind,
         "title_source": title_source,
+        "comment_posted": comment_posted,
     }
     if fallback_skip_count is not None:
         metadata["fallback_skip_count"] = fallback_skip_count
