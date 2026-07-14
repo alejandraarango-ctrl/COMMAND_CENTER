@@ -45,6 +45,33 @@ class BufferRateLimitError(RuntimeError):
 # 400-700 chars) is never cut mid-sentence.
 TIKTOK_CAPTION_LIMIT = 2200
 
+# Root cause of "I can never pick a thumbnail in Buffer for TikTok/Instagram":
+# our posts are created via the API with a remote `assets.video.url`, not by
+# dragging a file into Buffer's own web composer. The in-app "Edit Thumbnail"
+# frame-slider only populates once Buffer's own upload pipeline has run its
+# AWS transcode + per-15-second frame-generation pass on the file (see
+# "Why is my video taking a while to upload?" in Buffer's docs) -- for an
+# API-created post referencing an external URL, that pass appears to never
+# complete, so the slider is permanently stuck on a blank/gray bar and Save
+# does nothing. This isn't fixable from the browser at all.
+#
+# The supported fix is to set the thumbnail at *post-creation* time instead
+# of through that broken UI: Buffer's VideoAssetInput takes a nested
+# `metadata.thumbnailOffset` (milliseconds into the video) that selects the
+# frame Buffer uses as the cover, for Instagram, TikTok, and Pinterest only.
+# (`thumbnailUrl` -- uploading a separate custom image as the thumbnail --
+# is explicitly rejected by Buffer's API; only picking an existing frame of
+# the video itself is possible. Confirmed via Buffer's GraphQL schema:
+# VideoAssetInput.thumbnailUrl's description literally says "Do not use...
+# the API rejects video assets that set this field.")
+#
+# We default every video post to a small positive offset rather than 0ms --
+# many of Jazmin's clips fade in from black or a title-card transition, so
+# frame 0 is often a blank/ugly cover. 300ms is far enough in to clear a
+# typical fade without landing on meaningfully different content. Pass an
+# explicit `thumbnail_offset_ms` to send_to_buffer() to override per-post.
+_DEFAULT_VIDEO_THUMBNAIL_OFFSET_MS = 300
+
 # Cache channel IDs per service for the lifetime of a single cron run.
 # Channels don't change between API calls, so one lookup per service per run
 # is enough. Keys are service names ('tiktok', 'facebook', etc.).
@@ -251,6 +278,8 @@ def send_to_buffer(
     caption_limit: int | None = None,
     due_at: datetime | None = None,
     save_to_draft: bool = False,
+    thumbnail_offset_ms: int | None = _DEFAULT_VIDEO_THUMBNAIL_OFFSET_MS,
+    video_title: str | None = None,
 ) -> str:
     """Send content to Buffer's posting queue.
 
@@ -281,6 +310,14 @@ def send_to_buffer(
             CreatePostInput (has a saveToDraft: Boolean field independent of
             mode/schedulingType). Not yet verified end-to-end against a real
             post -- this is exactly what we're testing.
+        thumbnail_offset_ms: Milliseconds into the video to use as the cover
+            frame on Instagram/TikTok/Pinterest (see
+            _DEFAULT_VIDEO_THUMBNAIL_OFFSET_MS above for why this exists and
+            why the in-app "Edit Thumbnail" slider can't be used instead).
+            Ignored for media_type="image". Pass None to omit entirely and
+            let Buffer fall back to its own default (frame 0).
+        video_title: Optional video title metadata (currently only surfaced
+            by some networks' internal video players, not the post caption).
 
     Returns:
         The Buffer post ID on success.
@@ -297,7 +334,21 @@ def send_to_buffer(
     if media_type == "image":
         assets = [{"image": {"url": media_url}}]
     else:
-        assets = [{"video": {"url": media_url}}]
+        # thumbnailOffset/title live *inside* the video asset's own
+        # `metadata` (VideoAssetInput.metadata), which is a different,
+        # more-nested field than the post-level `metadata` block built
+        # below (that one holds facebook/instagram/youtube post-type
+        # settings). Do not confuse the two -- Buffer's schema really does
+        # have a metadata field at both levels.
+        video_asset: dict = {"url": media_url}
+        video_asset_metadata: dict = {}
+        if thumbnail_offset_ms is not None:
+            video_asset_metadata["thumbnailOffset"] = thumbnail_offset_ms
+        if video_title:
+            video_asset_metadata["title"] = video_title
+        if video_asset_metadata:
+            video_asset["metadata"] = video_asset_metadata
+        assets = [{"video": video_asset}]
 
     # Buffer nests platform-specific fields under metadata, not on the
     # top-level input. Build it up only with the keys that apply so we never
