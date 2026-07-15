@@ -150,12 +150,23 @@ def _load_anthropic_client():
     return anthropic.Anthropic(api_key=api_key)
 
 
+_COMMUNITY_CTA_INSTRUCTION = (
+    "El caption SIEMPRE debe incluir, ademas de -- no en vez de -- cualquier "
+    "otra llamada a la accion, una linea pidiendo comentar la palabra "
+    "'COMUNIDAD' o 'INVERTIR' para unirse a la comunidad gratuita y "
+    "aprender a invertir paso a paso (por ejemplo: \"Comenta 'COMUNIDAD' si "
+    "quieres unirte gratis y aprender a invertir paso a paso\", o \"Escribe "
+    "'INVERTIR' y te comparto como unirte\"). Esta CTA es obligatoria en "
+    "todos los captions generados para Instagram y TikTok."
+)
+
 _CAPTION_INSTRUCTIONS = (
     "Tono: cercano, motivador, claro, sin tecnicismos. Incluye un gancho en "
     "la primera linea, 2-3 lineas de contexto o valor, una llamada a la "
     "accion (seguir, comentar o guardar), y termina con 5 a 8 hashtags "
-    "relevantes en espanol e ingles. Maximo 150 palabras. Responde "
-    "unicamente con el caption, sin explicaciones adicionales ni comillas."
+    "relevantes en espanol e ingles. " + _COMMUNITY_CTA_INSTRUCTION + " "
+    "Maximo 150 palabras. Responde unicamente con el caption, sin "
+    "explicaciones adicionales ni comillas."
 )
 
 
