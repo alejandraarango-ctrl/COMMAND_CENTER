@@ -1,0 +1,98 @@
+{
+  "updated_at": "2026-07-15T20:10:00Z",
+  "note": "Snapshot manual del Drive de Jazmin -- no es una integracion en vivo. Se actualiza a mano (via Claude o Alejandra) cada vez que se revisa el Drive. Ver dashboard/src/app/drive-pending/page.tsx.",
+  "reels": [
+    {
+      "filename": "(15-07-2026)_Reel_Call-July07_#01.mp4.mp4",
+      "folder": "07_July 2026 / July 15",
+      "drive_url": "https://drive.google.com/file/d/114exWXTI61UrKxl2PTOvuuwcZYHQr3E1/view"
+    },
+    {
+      "filename": "(15-07-2026)_Reel_Call-July07_#02.mp4.mp4",
+      "folder": "07_July 2026 / July 15",
+      "drive_url": "https://drive.google.com/file/d/13mcy5FdH_mZ2nD3bFDCex7U7R7hLIq79/view"
+    },
+    {
+      "filename": "(16-07-2026)_Reel_Call-July07_#03.mp4.mp4",
+      "folder": "07_July 2026 / July 16",
+      "drive_url": "https://drive.google.com/file/d/1556Jos3mwx9aJonIrY9KcLA-b6S5UK-D/view"
+    },
+    {
+      "filename": "(16-07-2026)_Reel_Call-July07_#04.mp4.mp4",
+      "folder": "07_July 2026 / July 16",
+      "drive_url": "https://drive.google.com/file/d/1mLAVuMmu9fYHciKfGxPjRN2g8db8A9jI/view"
+    },
+    {
+      "filename": "(17-07-2026)_Reel_Call-July07_#05.mp4.mp4",
+      "folder": "07_July 2026 / July 17",
+      "drive_url": "https://drive.google.com/file/d/1d-dheFTa9CPEYxGiV5E0JguJWZlD0c9Y/view"
+    },
+    {
+      "filename": "(17-07-2026)_Reel_Call-July07_#06.mp4.mp4",
+      "folder": "07_July 2026 / July 17",
+      "drive_url": "https://drive.google.com/file/d/1-S743xlXtsYcgG9V09cGWaP6E9b0sKlQ/view"
+    },
+    {
+      "filename": "(17-07-2026)_Reel_Call-July07_#07.mp4.mp4",
+      "folder": "07_July 2026 / July 17",
+      "drive_url": "https://drive.google.com/file/d/1G0noESWqGLJZhN7sk579PeZqeK0PvL89/view"
+    },
+    {
+      "filename": "(18-07-2026)_Reel_Call-July07_#08.mp4.mp4",
+      "folder": "07_July 2026 / July 18",
+      "drive_url": "https://drive.google.com/file/d/16wOOawujJ4aswvWK-wN5c3cSWnE15qeh/view"
+    }
+  ],
+  "youtube": [
+    {
+      "filename": "(14-07-2026)_Clip_Call-Lilian-July07_#01.mp4.mp4",
+      "folder": "07 July / July 7 1:1",
+      "drive_url": "https://drive.google.com/file/d/1H02J_cm3sOEq03y8r90a87JZBnI1beIP/view"
+    },
+    {
+      "filename": "(15-07-2026)_Clip_Call-Héctor-July07_#02.mp4.mp4",
+      "folder": "07 July / July 7 1:1",
+      "drive_url": "https://drive.google.com/file/d/1lKBQhJSBHA8zXxqsIsnX4E0OTCVkzpMU/view"
+    },
+    {
+      "filename": "(16-07-2026)_Clip_Call-José-July07_#03.mp4.mp4",
+      "folder": "07 July / July 7 1:1",
+      "drive_url": "https://drive.google.com/file/d/11PtLU-geFfZ1PXIdEGtJfHuS7G_Gupvo/view"
+    },
+    {
+      "filename": "(17-07-2026)_Clip_Call-Ramón-July07_#04.mp4.mp4",
+      "folder": "07 July / July 7 1:1",
+      "drive_url": "https://drive.google.com/file/d/1Xd9JjDHesSqvyRgqNdchVfrFs5WvzPgQ/view"
+    },
+    {
+      "filename": "(11-07-2026)_Clip_Class-June11_#01.mp4",
+      "folder": "07 July / Live Class",
+      "drive_url": "https://drive.google.com/file/d/1WR5sc9e97goSr1A5h3se2Kw4X-MlHgM9/view"
+    },
+    {
+      "filename": "(11-07-2026)_Clip_Class-June11_#02.mp4",
+      "folder": "07 July / Live Class",
+      "drive_url": "https://drive.google.com/file/d/1krhzpSDmvFfan6meCMcVsYZx645t97ew/view"
+    },
+    {
+      "filename": "(12-07-2026)_Clip_Class-June11_#03.mp4",
+      "folder": "07 July / Live Class",
+      "drive_url": "https://drive.google.com/file/d/1R64wNptvUL76TpRTT97IaSfIkai4FeOy/view"
+    },
+    {
+      "filename": "(12-07-2026)_Clip_Class-June11_#04.mp4",
+      "folder": "07 July / Live Class",
+      "drive_url": "https://drive.google.com/file/d/16jy6_MZqQ22dlhg8bBin4OVfdtNdg_ob/view"
+    },
+    {
+      "filename": "(12-07-2026)_Clip_Class-June11_#05.mp4",
+      "folder": "07 July / Live Class",
+      "drive_url": "https://drive.google.com/file/d/1wXV_7iJ3eHKSJEvhuugRdr_r6TlTaoNC/view"
+    },
+    {
+      "filename": "(13-07-2026)_Clip_Class-June11_#06.mp4",
+      "folder": "07 July / Live Class",
+      "drive_url": "https://drive.google.com/file/d/1N5BKsdtuOAlAWJBb_spSfh1Obj0rLKXi/view"
+    }
+  ]
+}
