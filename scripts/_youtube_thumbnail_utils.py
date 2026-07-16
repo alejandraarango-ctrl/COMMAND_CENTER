@@ -30,20 +30,38 @@ import os
 import re
 
 _IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
+_VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v", ".avi", ".mkv"}
+_KNOWN_EXTENSIONS = _IMAGE_EXTENSIONS | _VIDEO_EXTENSIONS
 
 _CLIP_NEAR_WORD_RE = re.compile(r"clip\s*#?\s*(\d+)", re.IGNORECASE)
 _TRAILING_HASH_RE = re.compile(r"#(\d+)(?!.*\d)")
 
 
-def extract_clip_number(filename: str) -> int | None:
-    """Pull the clip ordinal out of a filename, or None if there isn't one.
+def _strip_known_extensions(filename: str) -> str:
+    """Strip trailing extensions repeatedly, as long as each one removed is
+    a recognized media extension.
 
-    Strips the file extension first -- ".mp4" contains a literal digit
-    ("4"), which broke the trailing-"#NN" fallback below (its "no more
-    digits after this point" check saw the "4" in ".mp4" and refused to
-    match what was actually the last real number in the name).
+    Files downloaded from Google Drive sometimes land with a doubled
+    extension (e.g. "...#02.mp4.mp4" instead of "...#02.mp4"). A single
+    `os.path.splitext` call only strips one ".mp4", leaving the other one
+    in the stem -- and that leftover ".mp4" contains a literal digit ("4"),
+    which broke the trailing-"#NN" regex below (its "no more digits after
+    this point" check saw that stray "4" and refused to match the real
+    clip number before it). Looping -- but only while the extension just
+    removed is a known media extension -- fixes the doubled-extension case
+    without misreading some unrelated "." elsewhere in a filename as an
+    extension to strip.
     """
-    stem = os.path.splitext(filename)[0]
+    stem = filename
+    while True:
+        stem, ext = os.path.splitext(stem)
+        if ext.lower() not in _KNOWN_EXTENSIONS:
+            return stem + ext
+
+
+def extract_clip_number(filename: str) -> int | None:
+    """Pull the clip ordinal out of a filename, or None if there isn't one."""
+    stem = _strip_known_extensions(filename)
     m = _CLIP_NEAR_WORD_RE.search(stem)
     if m:
         return int(m.group(1))
