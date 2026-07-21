@@ -152,12 +152,27 @@ def _load_anthropic_client():
 
 _COMMUNITY_CTA_INSTRUCTION = (
     "El caption SIEMPRE debe incluir, ademas de -- no en vez de -- cualquier "
-    "otra llamada a la accion, una linea pidiendo comentar la palabra "
+    "otra llamada a la accion, una linea pidiendo comentar una palabra clave "
+    "para dar el siguiente paso. Cual palabra depende del tipo de contenido "
+    "que ves en los fotogramas (o del contexto adicional dado, si lo hay):\n"
+    "- Si el reel es de una llamada/entrevista 1:1 donde Jazmin explica o "
+    "revisa el portafolio personalizado de un cliente (se ve una "
+    "conversacion uno a uno analizando acciones, ETFs o el portafolio "
+    "especifico de esa persona -- contenido tipo consultoria individual), "
+    "el CTA debe pedir comentar la palabra 'AVANZADO' para recibir una "
+    "asesoria personalizada con Jazmin (por ejemplo: \"Comenta 'AVANZADO' "
+    "si quieres una asesoria personalizada con Jazmin para armar tu "
+    "portafolio\").\n"
+    "- Para cualquier otro contenido (educativo general, tips, noticias del "
+    "mercado, contenido para principiantes -- es decir, todo lo que no sea "
+    "una asesoria 1:1 de portafolio), el CTA debe pedir comentar "
     "'COMUNIDAD' o 'INVERTIR' para unirse a la comunidad gratuita y "
     "aprender a invertir paso a paso (por ejemplo: \"Comenta 'COMUNIDAD' si "
     "quieres unirte gratis y aprender a invertir paso a paso\", o \"Escribe "
-    "'INVERTIR' y te comparto como unirte\"). Esta CTA es obligatoria en "
-    "todos los captions generados para Instagram y TikTok."
+    "'INVERTIR' y te comparto como unirte\").\n"
+    "Usa solo UNA de las dos segun aplique -- nunca las dos a la vez. Esta "
+    "CTA (una de las dos) es obligatoria en todos los captions generados "
+    "para Instagram y TikTok."
 )
 
 _CAPTION_INSTRUCTIONS = (
