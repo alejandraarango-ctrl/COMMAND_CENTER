@@ -294,6 +294,19 @@ def main() -> None:
         default=None,
         help="Contexto adicional sobre el video para ayudar a Claude a generar el caption",
     )
+    parser.add_argument(
+        "--platforms",
+        default=None,
+        help=(
+            "Lista separada por comas de plataformas a encolar (ej. 'tiktok' "
+            "o 'instagram,tiktok'). Si se omite, usa el default: solo "
+            "'instagram' para imagenes, 'instagram,tiktok' para videos. "
+            "Util para republicar el mismo archivo en una sola plataforma "
+            "sin duplicarlo en las demas -- por ejemplo, convertir una frase "
+            "(imagen) a un video corto y mandarla solo a 'tiktok' cuando la "
+            "version imagen ya se encolo a Instagram por separado."
+        ),
+    )
     args = parser.parse_args()
 
     if not os.path.isfile(args.media_path):
@@ -308,6 +321,9 @@ def main() -> None:
         platforms = ["instagram", "tiktok"]
     else:
         sys.exit(f"Unrecognized file type: {ext}")
+
+    if args.platforms:
+        platforms = [p.strip() for p in args.platforms.split(",") if p.strip()]
 
     if args.caption:
         caption = args.caption
@@ -380,7 +396,13 @@ def main() -> None:
     # reel. This costs YouTube quota (~1600 units/upload) so failures here
     # are reported but never block the Instagram/TikTok queueing above,
     # which already succeeded.
-    if media_type == "video":
+    #
+    # Only do this when actually queueing to Instagram -- e.g. a "frase"
+    # image re-encoded as a short video and sent only to `--platforms tiktok`
+    # (because the image version already went to Instagram separately)
+    # shouldn't also land as a YouTube Short; that's not what a static quote
+    # card is for, and it would burn quota for no reason.
+    if media_type == "video" and "instagram" in platforms:
         placeholder_title = os.path.splitext(os.path.basename(args.media_path))[0]
         print(f"\nSubiendo tambien a YouTube como Short (borrador Private): {placeholder_title!r} ...")
         try:
