@@ -184,6 +184,23 @@ _CAPTION_INSTRUCTIONS = (
     "explicaciones adicionales ni comillas."
 )
 
+# Para las imagenes tipo "frase" (memes de una sola frase con el texto ya
+# incrustado en la imagen, carpeta "Frases del Dia") el caption NO debe
+# repetir ni parafrasear la frase de la imagen -- debe ser un complemento
+# corto (una linea, con un emoji) que le de un toque extra sin duplicar el
+# texto que ya se ve en la foto. Nada de gancho largo, hashtags, ni CTA de
+# COMUNIDAD/AVANZADO aqui -- eso es para Reels/videos, no para estas frases.
+_QUOTE_IMAGE_CAPTION_INSTRUCTIONS = (
+    "Esta imagen es una 'frase' de Jazmin: el texto completo de la frase ya "
+    "esta incrustado en la imagen, visible para quien la vea. El caption de "
+    "Instagram NO debe repetir ni parafrasear esa frase. Escribe solo una "
+    "linea CORTA (maximo unas 8-10 palabras) que la complemente -- un "
+    "remate, una reaccion, o un pequeno empujon -- y termina con UN emoji "
+    "relevante. Nada de hashtags, nada de llamada a la accion larga, nada "
+    "de explicaciones. Responde unicamente con esa linea corta, sin "
+    "comillas."
+)
+
 
 def generate_caption_from_media(media_path: str, media_type: str, tema: str | None = None) -> str:
     """Analiza el video/imagen (vision) y genera una sugerencia de caption."""
@@ -211,17 +228,28 @@ def generate_caption_from_media(media_path: str, media_type: str, tema: str | No
         for img_bytes in images
     ]
 
-    instruction = (
-        "Estas viendo fotogramas de un Reel/post de Instagram y TikTok de "
-        "Jazmin Bautista, educadora financiera para inmigrantes latinos en "
-        "Estados Unidos (finanzasparamislatinos). Identifica de que trata "
-        "el contenido a partir de lo que aparece en pantalla (texto en "
-        "pantalla, graficas, escenas) y escribe una descripcion (caption) "
-        "corta en espanol para acompanarlo. "
-    )
-    if tema:
-        instruction += f"Contexto adicional dado por el equipo: {tema}. "
-    instruction += _CAPTION_INSTRUCTIONS
+    if media_type == "image":
+        instruction = (
+            "Estas viendo una imagen tipo 'frase' (meme de una sola frase) "
+            "de Jazmin Bautista, educadora financiera para inmigrantes "
+            "latinos en Estados Unidos (finanzasparamislatinos), publicada "
+            "en Instagram. "
+        )
+        if tema:
+            instruction += f"Contexto adicional dado por el equipo: {tema}. "
+        instruction += _QUOTE_IMAGE_CAPTION_INSTRUCTIONS
+    else:
+        instruction = (
+            "Estas viendo fotogramas de un Reel/post de Instagram y TikTok de "
+            "Jazmin Bautista, educadora financiera para inmigrantes latinos en "
+            "Estados Unidos (finanzasparamislatinos). Identifica de que trata "
+            "el contenido a partir de lo que aparece en pantalla (texto en "
+            "pantalla, graficas, escenas) y escribe una descripcion (caption) "
+            "corta en espanol para acompanarlo. "
+        )
+        if tema:
+            instruction += f"Contexto adicional dado por el equipo: {tema}. "
+        instruction += _CAPTION_INSTRUCTIONS
     content.append({"type": "text", "text": instruction})
 
     print("Generando sugerencia de caption con Claude...")
