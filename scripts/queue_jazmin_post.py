@@ -1,16 +1,22 @@
-"""One-off script: queue a local video for Jazmin's Instagram + TikTok Crosspost.
+"""One-off script: queue a local video/image for Jazmin's Instagram + TikTok +
+Facebook crosspost.
 
 Usage:
   python -m scripts.queue_jazmin_post /path/to/video.mp4 "Caption text here"
   python -m scripts.queue_jazmin_post /path/to/video.mp4
   python -m scripts.queue_jazmin_post /path/to/video.mp4 --tema "como ahorrar en dolares"
+  python -m scripts.queue_jazmin_post /path/to/video.mp4 --platforms tiktok
 
 What it does:
-  1. Uploads the video to Supabase Storage (bucket: media).
-  2. Gets a 1-hour signed URL Buffer can fetch it from (Buffer downloads
-     immediately on createPost, so 1 hour is plenty).
-  3. Inserts a posts row + a schedules row (scheduled_for=now) for both
-     "instagram" and "tiktok".
+  1. Uploads the video/image to Supabase Storage (bucket: media).
+  2. Gets a signed URL Buffer can fetch it from (valid 7 days -- see the
+     comment above _SIGNED_URL_TTL_SECONDS for why).
+  3. Inserts a posts row + a schedules row (scheduled_for=now) for each
+     target platform -- by default "instagram" + "facebook" for images,
+     "instagram" + "tiktok" + "facebook" for videos. Facebook posts to
+     Jazmin's Page (https://www.facebook.com/jazmin.bautista.12382/).
+     Override the platform list with --platforms (comma-separated) to send
+     to only some of them (see its --help text for why you'd do that).
 
 Caption: pass it directly as the second argument, or omit it entirely --
 Claude will look at the actual video/image (extracting a few frames via
@@ -23,9 +29,10 @@ This is a manual stand-in for what an automated content pipeline would do
 Jazmin's content is manually produced/edited, so there's no automatic
 trigger yet -- run this by hand each time a video is ready to post.
 
-After running this, either run the two crons manually to publish right away:
+After running this, either run the crons manually to publish right away:
   python -m cron.jazmin_instagram_cron
   python -m cron.jazmin_tiktok_cron
+  python -m cron.jazmin_facebook_cron
 or wait for Render to run them on their schedule (once registered).
 """
 
@@ -76,9 +83,10 @@ def parse_due_date(filename: str) -> datetime | None:
         # Matched the pattern but not a real calendar date (e.g. 31-02-2026)
         return None
 
-# Images post to Instagram only -- our TikTok adapter (platforms/tiktok.py)
-# only exercises Buffer's video path; TikTok photo-mode posting via Buffer
-# hasn't been tested, so we don't queue images there yet.
+# Images post to Instagram + Facebook -- our TikTok adapter
+# (platforms/tiktok.py) only exercises Buffer's video path; TikTok photo-mode
+# posting via Buffer hasn't been tested, so we don't queue images there yet.
+# Use `--platforms` to override this default on a per-run basis.
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".webm"}
 
@@ -315,10 +323,10 @@ def main() -> None:
     ext = os.path.splitext(args.media_path)[1].lower()
     if ext in IMAGE_EXTENSIONS:
         media_type = "image"
-        platforms = ["instagram"]
+        platforms = ["instagram", "facebook"]
     elif ext in VIDEO_EXTENSIONS:
         media_type = "video"
-        platforms = ["instagram", "tiktok"]
+        platforms = ["instagram", "tiktok", "facebook"]
     else:
         sys.exit(f"Unrecognized file type: {ext}")
 
