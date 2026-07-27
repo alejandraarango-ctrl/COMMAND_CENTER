@@ -177,9 +177,9 @@ _COMMUNITY_CTA_INSTRUCTION = (
 
 _CAPTION_INSTRUCTIONS = (
     "Tono: cercano, motivador, claro, sin tecnicismos. Incluye un gancho en "
-    "la primera linea, 2-3 lineas de contexto o valor, una llamada a la "
-    "accion (seguir, comentar o guardar), y termina con 5 a 8 hashtags "
-    "relevantes en espanol e ingles. " + _COMMUNITY_CTA_INSTRUCTION + " "
+    "la primera linea, 2-3 lineas de contexto o valor, y una llamada a la "
+    "accion (seguir, comentar o guardar). No incluyas hashtags. "
+    + _COMMUNITY_CTA_INSTRUCTION + " "
     "Maximo 150 palabras. Responde unicamente con el caption, sin "
     "explicaciones adicionales ni comillas."
 )
